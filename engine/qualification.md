@@ -25,7 +25,7 @@ Candidate 4.7.2:
   20/40/60/80/100 restarts was 576176/585088/536816/547120/553376 KiB. This is
   preliminary Simulator evidence, not a physical memory or thermal certification.
 - Matching Debug and Release device/Simulator engine and bindings XCFrameworks
-  build, with checksums and actual API provenance. A clean-cache build is running.
+  build, with checksums and actual API provenance. The full clean-cache Debug build also passed.
 - Fresh source preparation downloads the pinned revisions and applies both patch
   sets. Its source diff hash exactly matches the development checkout.
 
@@ -87,3 +87,23 @@ Release Hermes inspection found no development-panel or pack-server controls.
 Evidence files are stored under House of G's `artifacts/rooftop` locally, along
 with XcodeBuildMCP logs and `/tmp/hog-candidate-memgraph-40`. Keep exact commands,
 source/artifact hashes, and final-build test results when promoting later.
+
+## Clean-built product check
+
+The clean-cache Debug artifacts were installed into House of G and the actual
+Vivarium rooftop exported with that cache's matching 4.7.2 exporter. Native build
+and launch passed; the rooftop rendered and its conversation camera responded.
+Diagnostics reported `4.7.2-stable (custom_build)`, max FPS 30, Unicode round trips,
+and the pinned bridge. Twenty actual rooftop reloads passed without Godot errors.
+House of G's baseline selection and bundled pack were restored after this check.
+
+The pinned 4.5.1 product build also passed chat/keyboard -> reading -> tarot ->
+account -> home with a native draft preserved, 20 rooftop reloads, and automatic
+validated export -> explicit downloaded pack reload. Temporary draft/source edits
+were removed. A reproduced RN/Expo cache problem mixed Release binaries with Debug
+markers; application setup now invalidates generated configuration markers after
+CocoaPods, allowing the upstream build scripts to restore matching binaries.
+
+No new physical-device installation or recording was performed after the user
+paused phone testing. Physical qualification, the full performance comparison,
+and the remaining acceptance cases above are still required before promotion.

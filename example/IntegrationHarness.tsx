@@ -59,7 +59,16 @@ export default function IntegrationHarness() {
         ? `${documentDirectory}${name}.pck`
         : `${bundleDirectory}${name}.pck`;
     const path = decodeURIComponent(uri.replace(/^file:\/\//, ''));
-    const driver = Platform.OS === 'android' ? 'vulkan' : 'metal';
+    const compatibility =
+      Platform.OS === 'android' &&
+      process.env.EXPO_PUBLIC_GODOT_HARNESS_RENDERER === 'compatibility';
+    const driver =
+      Platform.OS === 'android'
+        ? compatibility
+          ? 'opengl3'
+          : 'vulkan'
+        : 'metal';
+    const method = compatibility ? 'gl_compatibility' : 'mobile';
     const operation = async () => {
       if (Platform.OS === 'android')
         await copyAsync({from: `asset:///${name}.pck`, to: uri});
@@ -76,7 +85,7 @@ export default function IntegrationHarness() {
             '--rendering-driver',
             driver,
             '--rendering-method',
-            'mobile',
+            method,
             '--audio-driver',
             'Dummy',
             '--max-fps',
@@ -106,6 +115,10 @@ export default function IntegrationHarness() {
           return {
             scene: sceneStatus,
             engine: api.Engine.get_version_info().get('string'),
+            renderer: {
+              driver: api.RenderingServer.get_current_rendering_driver_name(),
+              method: api.RenderingServer.get_current_rendering_method(),
+            },
             native: RTNGodot.getSessionStatus(),
           };
         });
@@ -171,7 +184,16 @@ export default function IntegrationHarness() {
     }
   };
   const checkRecovery = async () => {
-    const driver = Platform.OS === 'android' ? 'vulkan' : 'metal';
+    const compatibility =
+      Platform.OS === 'android' &&
+      process.env.EXPO_PUBLIC_GODOT_HARNESS_RENDERER === 'compatibility';
+    const driver =
+      Platform.OS === 'android'
+        ? compatibility
+          ? 'opengl3'
+          : 'vulkan'
+        : 'metal';
+    const method = compatibility ? 'gl_compatibility' : 'mobile';
     try {
       await runOnGodotThread(() => {
         'worklet';
@@ -184,7 +206,7 @@ export default function IntegrationHarness() {
           '--rendering-driver',
           driver,
           '--rendering-method',
-          'mobile',
+          method,
           '--audio-driver',
           'Dummy',
         ]);
@@ -265,7 +287,7 @@ export default function IntegrationHarness() {
           style={styles.input}
         />
         <Button
-          title="Load blue fixture"
+          title="Load blue pack"
           disabled={busy}
           onPress={() => {
             void load('a')

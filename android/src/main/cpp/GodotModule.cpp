@@ -62,7 +62,7 @@ class AndroidThread {
 	bool quit = false;
 
 public:
-    std::function<void()> tick;
+    std::function<bool()> tick;
     bool isCurrent() const { return thread.get_id() == std::this_thread::get_id(); }
 	AndroidThread() :
 			thread(&AndroidThread::run, this) {
@@ -153,16 +153,22 @@ public:
 			started.notify_all();
 		}
 
-		while (!quit) {
-			int outFd;
-			int outEvents;
-			void *outData;
-			int res = ALooper_pollOnce(10, &outFd, &outEvents, &outData);
-            if (tick) tick();
-			if (res == ALOOPER_POLL_ERROR) {
-				LOGE("ALooper_pollOnce internal error.");
-			}
-		}
+        bool rendered = false;
+        while (!quit) {
+            int outFd;
+            int outEvents;
+            void *outData;
+            // Godot owns active frame pacing. Block only when paused/stopped;
+            // queued commands wake the looper even when no frame is rendered.
+            int result = ALooper_pollOnce(rendered ? 0 : -1, &outFd, &outEvents, &outData);
+            // Drain a bounded batch so touch traffic cannot accumulate one task
+            // per frame, while still giving rendering a chance under heavy input.
+            for (int pending = 0; result == ALOOPER_POLL_CALLBACK && pending < 63 && !quit; ++pending) {
+                result = ALooper_pollOnce(0, &outFd, &outEvents, &outData);
+            }
+            if (result == ALOOPER_POLL_ERROR) LOGE("ALooper_pollOnce internal error.");
+            rendered = !quit && tick && tick();
+        }
 
 		ALooper_release(looper);
 		LOGI("AndroidThread Looper thread exited.");
@@ -356,7 +362,7 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 	}
 
 	_sessionState = data->paused || data->in_background ? 3 : 2;
-    data->thread.tick = [this]() { if (!is_paused()) iterate(); };
+    data->thread.tick = [this]() { if (is_paused()) return false; iterate(); return true; };
 	updateWindows(true);
 
 	return instance;

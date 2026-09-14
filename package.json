@@ -1,6 +1,6 @@
 {
   "name": "@borndotcom/react-native-godot",
-  "version": "1.0.1",
+  "version": "1.0.2-smalllixin.1",
   "summary": "React Native Godot",
   "description": "Embed Godot into React Native apps",
   "main": "lib/commonjs/index",
@@ -45,13 +45,13 @@
     "ios",
     "android"
   ],
-  "repository": "https://github.com/borndotcom/react-native-godot.git",
-  "author": "React Native Godot Developers (Born & Migeran)",
+  "repository": "https://github.com/smalllixin/react-native-godot.git",
+  "author": "React Native Godot Developers (Born &\u00a0Migeran)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/borndotcom/react-native-godot/issues"
+    "url": "https://github.com/smalllixin/react-native-godot/issues"
   },
-  "homepage": "https://github.com/borndotcom/react-native-godot#readme",
+  "homepage": "https://github.com/smalllixin/react-native-godot",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"

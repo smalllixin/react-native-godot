@@ -350,7 +350,10 @@ public:
 			}
 			case godot::Variant::Type::STRING: {
 				godot::String s = variant;
-				jsi::String ret = jsi::String::createFromUtf8(rt, (uint8_t *)s.utf8().get_data(), s.length());
+				// JSI expects a byte length; String::length counts Unicode code points.
+				// Retain the UTF-8 buffer for the duration of the conversion.
+				const godot::CharString utf8 = s.utf8();
+				jsi::String ret = jsi::String::createFromUtf8(rt, reinterpret_cast<const uint8_t *>(utf8.get_data()), utf8.length());
 				return ret;
 			}
 			// math types

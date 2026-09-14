@@ -1,3 +1,5 @@
+> **Fork status:** Expo 57 / Worklets modernization, incorporating upstream PRs #33 and #34. Engine remains 4.5.1.migeran.2. See [upgrade assessment](docs/UPGRADE.md) for the 4.7.2 iOS blockers and validation status.
+
 ![Cover-21](https://github.com/user-attachments/assets/770e4972-84f7-433e-87db-6391601256ba)
 Born React Native Godot
 -----------------------

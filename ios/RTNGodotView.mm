@@ -66,6 +66,8 @@ static UIView *_currentView = nil;
 	bool _propsUpdated;
 	bool _instanceCallbackRegistered;
 	bool _addingGodotView;
+    uint64_t _attachmentGeneration;
+    uint64_t _attachmentRequest;
 }
 
 + (BOOL)shouldBeRecycled {
@@ -98,9 +100,8 @@ static UIView *_currentView = nil;
 }
 
 + (CALayer *)addMainLayerToGodotView:(UIView *)view {
-	godot::Ref<godot::RenderingNativeSurface> nativeSurface = GodotModule::get_singleton()->get_main_rendering_surface();
-	godot::Ref<godot::RenderingNativeSurfaceApple> appleSurface = godot::Object::cast_to<godot::RenderingNativeSurfaceApple>(*nativeSurface);
-	CALayer *mainLayer = (__bridge CALayer *)(void *)appleSurface->get_layer();
+	CALayer *mainLayer = (__bridge CALayer *)GodotModule::get_singleton()->get_main_rendering_layer();
+    if (!mainLayer) return nil;
 	if (![_views containsObject:view]) {
 		[_views addObject:view];
 	}
@@ -138,6 +139,8 @@ static UIView *_currentView = nil;
 	_instanceCallbackRegistered = false;
 	_windowName = @"";
 	_addingGodotView = false;
+    _attachmentGeneration = 0;
+    _attachmentRequest = 0;
 }
 
 //Setter method
@@ -198,22 +201,26 @@ static UIView *_currentView = nil;
 		_instanceCallbackRegistered = true;
 	}
 
-	if (!instance || !instance->is_started()) {
+	if (!instance) {
 		// Cannot continue without a Godot instance
 		NSLog(@"RTNGodotView: Godot instance not started yet.");
 		return;
 	}
 
-	if (_windowId > 0 && godot::UtilityFunctions::is_instance_id_valid(_windowId)) {
+	if (_windowId > 0) {
 		NSLog(@"RTNGodotView: Window already configured");
 		return;
 	}
 
-	_addingGodotView = true;
+	if (_addingGodotView) return;
+    _addingGodotView = true;
+    const uint64_t generation = GodotModule::get_singleton()->generation();
+    const uint64_t request = ++_attachmentRequest;
 	if ([@"" isEqualToString:_windowName]) {
 		// Set up the main window
 
 		GodotModule::get_singleton()->runOnGodotThread([=]() {
+            if (generation != GodotModule::get_singleton()->generation() || !GodotModule::get_singleton()->get_instance()) return;
 			godot::MainLoop *mainLoop = godot::Engine::get_singleton()->get_main_loop();
 			godot::SceneTree *sceneTree = godot::Object::cast_to<godot::SceneTree>(mainLoop);
 			if (!sceneTree) {
@@ -221,8 +228,11 @@ static UIView *_currentView = nil;
 				return;
 			}
 			godot::Window *newWindow = sceneTree->get_root();
+            const uint64_t newWindowId = newWindow->get_instance_id();
 			dispatch_async(dispatch_get_main_queue(), ^{
-				self->_windowId = newWindow->get_instance_id();
+				if (generation != GodotModule::get_singleton()->generation() || request != self->_attachmentRequest) return;
+                self->_attachmentGeneration = generation;
+                self->_windowId = newWindowId;
 				self->_renderingLayer = [RTNGodotView addMainLayerToGodotView:self];
 				[self setNeedsLayout];
 				self->_addingGodotView = false;
@@ -232,6 +242,7 @@ static UIView *_currentView = nil;
 	} else {
 		// Subwindow case
 		GodotModule::get_singleton()->runOnGodotThread([=]() {
+            if (generation != GodotModule::get_singleton()->generation() || !GodotModule::get_singleton()->get_instance()) return;
 			godot::MainLoop *mainLoop = godot::Engine::get_singleton()->get_main_loop();
 			godot::SceneTree *sceneTree = godot::Object::cast_to<godot::SceneTree>(mainLoop);
 			if (!sceneTree) {
@@ -264,7 +275,8 @@ static UIView *_currentView = nil;
 			godot::RenderingNativeSurface *ptr = godot::Object::cast_to<godot::RenderingNativeSurface>(appleSurface.ptr());
 			godot::Ref<godot::RenderingNativeSurface> nativeSurface(ptr);
 
-			newWindow->set_visible(true);
+			const uint64_t newWindowId = newWindow->get_instance_id();
+            newWindow->set_visible(true);
 			newWindow->set_native_surface(nativeSurface);
 			godot::Callable exited_cb = GodotModule::get_singleton()->create_callable([=](const godot::Variant **p_arguments, int p_argcount, godot::Variant &r_return_value, GDExtensionCallError &r_call_error) {
 				// Window is now removed, needs relayout
@@ -280,7 +292,9 @@ static UIView *_currentView = nil;
 			newWindow->connect("tree_exited", exited_cb);
 
 			dispatch_async(dispatch_get_main_queue(), ^{
-				self->_windowId = newWindow->get_instance_id();
+				if (generation != GodotModule::get_singleton()->generation() || request != self->_attachmentRequest) return;
+                self->_attachmentGeneration = generation;
+                self->_windowId = newWindowId;
 				self->_renderingLayer = newRenderingLayer;
 				[self.layer addSublayer:self->_renderingLayer];
 				[self setNeedsLayout];
@@ -291,15 +305,13 @@ static UIView *_currentView = nil;
 }
 
 - (void)removeFromGodotView:(bool)addAfter unregister:(bool)unregister {
+    NSMutableSet<UITouch *> *activeTouches = [NSMutableSet set];
+    for (UITouch *touch : _touches) if (touch) [activeTouches addObject:touch];
+    [self forwardTouches:activeTouches phase:3];
+
 	NSLog(@"RTNGodotView: Removing Godot View: %@, windowName: %@, addAfter: %d", self, _windowName, addAfter);
-	if (_addingGodotView) {
-		NSLog(@"RTNGodotView: Adding in progress, rescheduling: %@", self);
-		GodotModule::get_singleton()->runOnGodotThread([=]() {
-			dispatch_async(dispatch_get_main_queue(), ^{
-				[self removeFromGodotView:addAfter unregister:unregister];
-			});
-		});
-	}
+    ++_attachmentRequest;
+    _addingGodotView = false;
 	if (unregister) {
 		GodotModule::get_singleton()->unregisterWindowUpdateCallback((__bridge void *)self);
 		self->_instanceCallbackRegistered = false;
@@ -328,11 +340,11 @@ static UIView *_currentView = nil;
 	} else {
 		if (!unregister) {
 			// This should only happen when the Godot instance is being stopped
-			dispatch_sync(dispatch_get_main_queue(), [&removeBlock]() {
+			dispatch_sync(dispatch_get_main_queue(), [removeBlock]() {
 				removeBlock();
 			});
 		} else {
-			dispatch_async(dispatch_get_main_queue(), [&removeBlock]() {
+			dispatch_async(dispatch_get_main_queue(), [removeBlock]() {
 				removeBlock();
 			});
 		}
@@ -340,52 +352,23 @@ static UIView *_currentView = nil;
 }
 
 - (void)layoutSubviews {
-	godot::GodotInstance *instance = GodotModule::get_singleton()->get_instance();
-
-	if (!instance || !instance->is_started()) {
-		// Cannot continue without a Godot instance
-		NSLog(@"RTNGodotView: layoutSubviews: No Godot Instance Running");
-		return;
-	}
-
-	if (!_windowId || !_renderingLayer) {
-		NSLog(@"RTNGodotView: layoutSubviews: No window configured");
-		return;
-	}
-
-	{
-		NSLog(@"RTNGodotView: self.contentView.bounds: %@", NSStringFromCGRect(self.bounds));
-		NSLog(@"RTNGodotView: self.contentView.layer.bounds: %@", NSStringFromCGRect(self.layer.bounds));
-		NSLog(@"RTNGodotView: _renderingLayer.bounds: %@", NSStringFromCGRect(_renderingLayer.bounds));
-		NSLog(@"RTNGodotView: self.contentView.layer.frame: %@", NSStringFromCGRect(self.layer.frame));
-		NSLog(@"RTNGodotView: self.contentView.frame: %@", NSStringFromCGRect(self.frame));
-		NSLog(@"RTNGodotView: _renderingLayer.frame: %@", NSStringFromCGRect(_renderingLayer.frame));
-
-		{
-			double contentScaleFactor = GodotModule::get_singleton()->get_content_scale_factor();
-			// Make sure that the rendering layer has always at least 10x10 pixel size
-			CGRect bounds = CGRectMake(self.layer.bounds.origin.x,
-					self.layer.bounds.origin.x,
-					godot::MAX(10, self.layer.bounds.size.width),
-					godot::MAX(10, self.layer.bounds.size.height));
-
-			_renderingLayer.bounds = bounds;
-			NSLog(@"RTNGodotView: _renderingLayer.bounds: %@", NSStringFromCGRect(_renderingLayer.bounds));
-			NSLog(@"RTNGodotView: _renderingLayer.frame: %@", NSStringFromCGRect(_renderingLayer.frame));
-			GodotModule::get_singleton()->runOnGodotThread([=]() {
-				godot::DisplayServerEmbedded *dse = godot::DisplayServerEmbedded::get_singleton();
-				if (dse) {
-					if (godot::UtilityFunctions::is_instance_id_valid(_windowId)) {
-						godot::Object *obj = godot::UtilityFunctions::instance_from_id(_windowId);
-						godot::Window *window = godot::Object::cast_to<godot::Window>(obj);
-						if (window) {
-							dse->resize_window(godot::Vector2i(_renderingLayer.bounds.size.width * contentScaleFactor, _renderingLayer.bounds.size.height * contentScaleFactor), window->get_window_id());
-						}
-					}
-				}
-			});
-		}
-	}
+    [super layoutSubviews];
+    if (!_windowId || !_renderingLayer) return;
+    auto *module = GodotModule::get_singleton();
+    const uint64_t generation = _attachmentGeneration;
+    const uint64_t windowId = _windowId;
+    const double scale = module->get_content_scale_factor();
+    const CGRect bounds = CGRectMake(0, 0, godot::MAX(10, self.bounds.size.width), godot::MAX(10, self.bounds.size.height));
+    _renderingLayer.bounds = bounds;
+    const int width = bounds.size.width * scale;
+    const int height = bounds.size.height * scale;
+    module->runOnGodotThread([=]() {
+        if (generation != module->generation() || !module->get_instance()) return;
+        if (!godot::UtilityFunctions::is_instance_id_valid(windowId)) return;
+        auto *window = godot::Object::cast_to<godot::Window>(godot::UtilityFunctions::instance_from_id(windowId));
+        auto *display = godot::DisplayServerEmbedded::get_singleton();
+        if (window && display) display->resize_window(godot::Vector2i(width, height), window->get_window_id());
+    });
 }
 
 - (int)getTouchId:(UITouch *)touch {
@@ -412,175 +395,46 @@ static UIView *_currentView = nil;
 	_touches[touchId] = nil;
 }
 
-- (void)touchesBegan:(NSSet<UITouch *> *)touches
-		   withEvent:(UIEvent *)event {
-	godot::GodotInstance *instance = GodotModule::get_singleton()->get_instance();
-
-	if (!instance || !instance->is_started()) {
-		NSLog(@"RTNGodotView: touchesBegan: No Godot instance started");
-		return;
-	}
-	if (!_windowId) {
-		NSLog(@"RTNGodotView: touchesBegan: No window configured");
-		return;
-	}
-	godot::DisplayServerEmbedded *dse = godot::DisplayServerEmbedded::get_singleton();
-	if (!dse) {
-		NSLog(@"RTNGodotView: touchesBegan: No Godot DisplayServer instance");
-		return;
-	}
-	for (UITouch *touch in touches) {
-		int touchId = [self getTouchId:touch];
-		if (touchId == -1) {
-			continue;
-		}
-		CGPoint location = [touch locationInView:self];
-		if (!CGRectContainsPoint(_renderingLayer.frame, location)) {
-			continue;
-		}
-		location.x -= _renderingLayer.frame.origin.x;
-		location.y -= _renderingLayer.frame.origin.y;
-		NSUInteger tapCount = touch.tapCount;
-		double contentScaleFactor = GodotModule::get_singleton()->get_content_scale_factor();
-		GodotModule::get_singleton()->runOnGodotThread([=]() {
-			if (godot::UtilityFunctions::is_instance_id_valid(_windowId)) {
-				godot::Object *obj = godot::UtilityFunctions::instance_from_id(_windowId);
-				godot::Window *window = godot::Object::cast_to<godot::Window>(obj);
-				dse->touch_press(touchId, location.x * contentScaleFactor, location.y * contentScaleFactor, true, tapCount > 1, window->get_window_id());
-			}
-		});
-	}
+// Capture UIKit state on main; resolve Godot objects only on the engine thread.
+- (void)forwardTouches:(NSSet<UITouch *> *)touches phase:(int)phase {
+    const uint64_t generation = _attachmentGeneration;
+    const uint64_t windowId = _windowId;
+    if (!windowId || !_renderingLayer) return;
+    const CGRect frame = _renderingLayer.frame;
+    const double scale = GodotModule::get_singleton()->get_content_scale_factor();
+    for (UITouch *touch in touches) {
+        CGPoint point = [touch locationInView:self];
+        if (phase == 0 && !CGRectContainsPoint(frame, point)) continue;
+        int touchId = -1;
+        if (phase == 0) touchId = [self getTouchId:touch];
+        else for (int i = 0; i < MAX_TOUCH_COUNT; ++i) if (_touches[i] == touch) { touchId = i; break; }
+        if (touchId < 0) continue;
+        if (phase >= 2) [self removeTouchId:touchId];
+        CGPoint previous = [touch previousLocationInView:self];
+        point.x = (point.x - frame.origin.x) * scale;
+        point.y = (point.y - frame.origin.y) * scale;
+        previous.x = (previous.x - frame.origin.x) * scale;
+        previous.y = (previous.y - frame.origin.y) * scale;
+        const bool doubleTap = touch.tapCount > 1;
+        const float pressure = touch.maximumPossibleForce > 0 ? touch.force / touch.maximumPossibleForce : 0;
+        GodotModule::get_singleton()->runOnGodotThread([=]() {
+            auto *module = GodotModule::get_singleton();
+            if (generation != module->generation() || !module->get_instance()) return;
+            if (!godot::UtilityFunctions::is_instance_id_valid(windowId)) return;
+            auto *window = godot::Object::cast_to<godot::Window>(godot::UtilityFunctions::instance_from_id(windowId));
+            auto *display = godot::DisplayServerEmbedded::get_singleton();
+            if (!window || !display) return;
+            const auto id = window->get_window_id();
+            if (phase == 3) display->touches_canceled(touchId, id);
+            else if (phase == 1) display->call("touch_drag", touchId, previous.x, previous.y, point.x, point.y, pressure, godot::Vector2(), id);
+            else display->call("touch_press", touchId, point.x, point.y, phase == 0, doubleTap, id);
+        });
+    }
 }
-
-- (void)touchesMoved:(NSSet<UITouch *> *)touches
-		   withEvent:(UIEvent *)event {
-	godot::GodotInstance *instance = GodotModule::get_singleton()->get_instance();
-
-	if (!instance || !instance->is_started()) {
-		NSLog(@"RTNGodotView: touchesMoved: No Godot instance started");
-		return;
-	}
-	if (!_windowId) {
-		NSLog(@"RTNGodotView: touchesMoved: No window configured");
-		return;
-	}
-	godot::DisplayServerEmbedded *dse = godot::DisplayServerEmbedded::get_singleton();
-	if (!dse) {
-		NSLog(@"RTNGodotView: touchesMoved: No Godot DisplayServer instance");
-		return;
-	}
-	for (UITouch *touch in touches) {
-		int touchId = [self getTouchId:touch];
-		if (touchId == -1) {
-			continue;
-		}
-		CGPoint location = [touch locationInView:self];
-		if (!CGRectContainsPoint(_renderingLayer.frame, location)) {
-			continue;
-		}
-		location.x -= _renderingLayer.frame.origin.x;
-		location.y -= _renderingLayer.frame.origin.y;
-		CGPoint prevLocation = [touch previousLocationInView:self];
-		if (!CGRectContainsPoint(_renderingLayer.frame, prevLocation)) {
-			continue;
-		}
-		prevLocation.x -= _renderingLayer.frame.origin.x;
-		prevLocation.y -= _renderingLayer.frame.origin.y;
-		CGFloat alt = touch.altitudeAngle;
-		CGVector azim = [touch azimuthUnitVectorInView:self];
-		CGFloat force = touch.force;
-		CGFloat maximumPossibleForce = touch.maximumPossibleForce;
-		double contentScaleFactor = GodotModule::get_singleton()->get_content_scale_factor();
-		GodotModule::get_singleton()->runOnGodotThread([=]() {
-			if (godot::UtilityFunctions::is_instance_id_valid(_windowId)) {
-				godot::Object *obj = godot::UtilityFunctions::instance_from_id(_windowId);
-				godot::Window *window = godot::Object::cast_to<godot::Window>(obj);
-				dse->touch_drag(
-						touchId,
-						prevLocation.x * contentScaleFactor,
-						prevLocation.y * contentScaleFactor,
-						location.x * contentScaleFactor,
-						location.y * contentScaleFactor,
-						force / maximumPossibleForce,
-						godot::Vector2(azim.dx * cos(alt), azim.dy * cos(alt)),
-						window->get_window_id());
-			}
-		});
-	}
-}
-
-- (void)touchesEnded:(NSSet<UITouch *> *)touches
-		   withEvent:(UIEvent *)event {
-	godot::GodotInstance *instance = GodotModule::get_singleton()->get_instance();
-
-	if (!instance || !instance->is_started()) {
-		NSLog(@"RTNGodotView: touchesEnded: No Godot instance started");
-		return;
-	}
-	if (!_windowId) {
-		NSLog(@"RTNGodotView: touchesEnded: No window configured");
-		return;
-	}
-	godot::DisplayServerEmbedded *dse = godot::DisplayServerEmbedded::get_singleton();
-	if (!dse) {
-		NSLog(@"RTNGodotView: touchesEnded: No Godot DisplayServer instance");
-		return;
-	}
-	for (UITouch *touch in touches) {
-		int touchId = [self getTouchId:touch];
-		if (touchId == -1) {
-			continue;
-		}
-		[self removeTouchId:touchId];
-		CGPoint location = [touch locationInView:self];
-		if (!CGRectContainsPoint(_renderingLayer.frame, location)) {
-			continue;
-		}
-		location.x -= _renderingLayer.frame.origin.x;
-		location.y -= _renderingLayer.frame.origin.y;
-		double contentScaleFactor = GodotModule::get_singleton()->get_content_scale_factor();
-		GodotModule::get_singleton()->runOnGodotThread([=]() {
-			if (godot::UtilityFunctions::is_instance_id_valid(_windowId)) {
-				godot::Object *obj = godot::UtilityFunctions::instance_from_id(_windowId);
-				godot::Window *window = godot::Object::cast_to<godot::Window>(obj);
-				dse->touch_press(touchId, location.x * contentScaleFactor, location.y * contentScaleFactor, false, false, window->get_window_id());
-			}
-		});
-	}
-}
-
-- (void)touchesCancelled:(NSSet<UITouch *> *)touches
-			   withEvent:(UIEvent *)event {
-	godot::GodotInstance *instance = GodotModule::get_singleton()->get_instance();
-
-	if (!instance || !instance->is_started()) {
-		NSLog(@"RTNGodotView: touchesCancelled: No Godot instance started");
-		return;
-	}
-	if (!_windowId) {
-		NSLog(@"RTNGodotView: touchesCancelled: No window configured");
-		return;
-	}
-	godot::DisplayServerEmbedded *dse = godot::DisplayServerEmbedded::get_singleton();
-	if (!dse) {
-		NSLog(@"RTNGodotView: touchesCancelled: No Godot DisplayServer instance");
-		return;
-	}
-	for (UITouch *touch in touches) {
-		int touchId = [self getTouchId:touch];
-		if (touchId == -1) {
-			continue;
-		}
-		[self removeTouchId:touchId];
-		GodotModule::get_singleton()->runOnGodotThread([=]() {
-			if (godot::UtilityFunctions::is_instance_id_valid(_windowId)) {
-				godot::Object *obj = godot::UtilityFunctions::instance_from_id(_windowId);
-				godot::Window *window = godot::Object::cast_to<godot::Window>(obj);
-				dse->touches_canceled(touchId, window->get_window_id());
-			}
-		});
-	}
-}
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event { [self forwardTouches:touches phase:0]; }
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event { [self forwardTouches:touches phase:1]; }
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event { [self forwardTouches:touches phase:2]; }
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event { [self forwardTouches:touches phase:3]; }
 
 - (void)willMoveToSuperview:(UIView *)newSuperview {
 	NSLog(@"RTNGodotView: %@ will move to superview %@", self, newSuperview);

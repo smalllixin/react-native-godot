@@ -36,7 +36,9 @@ jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<faceb
 namespace facebook::react {
 
 class NativeGodotModule : public NativeGodotModuleCxxSpec<NativeGodotModule> {
+std::function<void()> invalidateRuntime;
 public:
+	~NativeGodotModule() override { if (invalidateRuntime) invalidateRuntime(); }
 	NativeGodotModule(std::shared_ptr<CallInvoker> jsInvoker);
 
 	bool installTurboModule(jsi::Runtime &rt);

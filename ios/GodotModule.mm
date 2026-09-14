@@ -146,16 +146,23 @@ static void configureGodotDisplayLink(CADisplayLink *displayLink) {
 
 // Helper method to execute the block on the background thread
 - (void)executeBlock:(void (^)(void))block {
-	block();
+	@autoreleasepool {
+		block();
+	}
 }
 
 - (void)step:(CADisplayLink *)sender {
-	GodotModule::get_singleton()->iterate();
+	@autoreleasepool {
+		GodotModule::get_singleton()->iterate();
+	}
 }
 
 @end
 
-typedef GDExtensionObjectPtr (*libgodot_create_godot_instance_type)(int, char *[], GDExtensionInitializationFunction, InvokeCallbackFunction, ExecutorData, InvokeCallbackFunction, ExecutorData, LogCallbackFunction, LogCallbackData);
+using HostInvoke = void (*)(void (*)(void *), void *, void *);
+using HostLog = void (*)(void *, const char *, bool);
+typedef GDExtensionObjectPtr (*libgodot_create_godot_instance_type)(int, char *[], GDExtensionInitializationFunction, HostInvoke, void *, HostInvoke, void *, HostLog, void *);
+using UpstreamCreate = GDExtensionObjectPtr (*)(int, char *[], GDExtensionInitializationFunction);
 typedef void (*libgodot_destroy_godot_instance_type)(GDExtensionObjectPtr p_godot_instance);
 
 struct ApplePlatformData : PlatformData {
@@ -200,7 +207,7 @@ static void uninitialize_default_module(godot::ModuleInitializationLevel p_level
 	}
 }
 
-static void logCallBack(LogCallbackData p_data, const char *p_log_message, bool p_err) {
+static void logCallBack(void *p_data, const char *p_log_message, bool p_err) {
 	GodotModule *gm = (GodotModule *)p_data;
 	gm->log(p_log_message, p_err);
 }
@@ -220,7 +227,7 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 	ApplePlatformData *data = static_cast<ApplePlatformData *>(_data);
 
 	// Make sure that we only run this method once at a time.
-	std::lock_guard createLock(data->createMutex);
+	std::unique_lock createLock(data->createMutex);
 
 	{
 		std::lock_guard lock(_mutex);
@@ -229,18 +236,22 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 		}
 	}
 
+	_sessionState = 1;
+	++_generation;
 	void *handle = nullptr;
 	if (data->func_libgodot_create_godot_instance == nullptr) {
 		handle = dlopen("libgodot.framework/libgodot", RTLD_LAZY | RTLD_LOCAL | RTLD_FIRST);
 
 		if (handle == nullptr) {
 			NSLog(@"Unable to open libgodot.framework: %s", dlerror());
+            _sessionState = 5;
 			return nullptr;
 		}
 		libgodot_create_godot_instance_type func_libgodot_create_godot_instance = (libgodot_create_godot_instance_type)dlsym(handle, "libgodot_create_godot_instance");
 
 		if (func_libgodot_create_godot_instance == nullptr) {
 			NSLog(@"Unable to load libgodot_create_godot_instance symbol: %s", dlerror());
+            _sessionState = 5;
 			dlclose(handle);
 			return nullptr;
 		}
@@ -263,10 +274,21 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 		cargs.push_back(arg.c_str());
 	}
 
-	GDExtensionObjectPtr instance_ptr = data->func_libgodot_create_godot_instance(cargs.size(), (char **)cargs.data(), gdextension_default_init, nullptr, nullptr, nullptr, nullptr, logCallBack, this); // TODO: Do we want to use the extra 4 params?
+	GDExtensionObjectPtr instance_ptr = nullptr;
+    // The candidate preserves upstream's C ABI. Its separate extension symbol
+    // distinguishes it from the baseline Migeran ABI without guessing versions.
+    if (dlsym(handle, "libgodot_embedding_api_version")) {
+        auto setLog = reinterpret_cast<void (*)(HostLog, void *)>(dlsym(handle, "libgodot_set_log_callback"));
+        if (setLog) setLog(logCallBack, this);
+        auto create = reinterpret_cast<UpstreamCreate>(data->func_libgodot_create_godot_instance);
+        instance_ptr = create(cargs.size(), (char **)cargs.data(), gdextension_default_init);
+    } else {
+        instance_ptr = data->func_libgodot_create_godot_instance(cargs.size(), (char **)cargs.data(), gdextension_default_init, nullptr, nullptr, nullptr, nullptr, logCallBack, this);
+    }
 	if (instance_ptr == nullptr) {
 		// Unable to start Godot
 		NSLog(@"Unable to start Godot");
+        _sessionState = 5;
 		if (handle) {
 			dlclose(handle);
 			handle = nullptr;
@@ -280,40 +302,60 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 
 	instance = reinterpret_cast<godot::GodotInstance *>(godot::internal::get_object_instance_binding(instance_ptr));
 
-	CGRect screen = [[UIScreen mainScreen] bounds];
-	CGFloat contentScaleFactor = [[UIScreen mainScreen] scale];
+	__block CGRect screen;
+	__block CGFloat contentScaleFactor;
+	dispatch_sync(dispatch_get_main_queue(), ^{
+		screen = [[UIScreen mainScreen] bounds];
+		contentScaleFactor = [[UIScreen mainScreen] scale];
+	});
 
 	LOGI("Initialize Main Window Layer on the main thread");
 
 	// Godot automatically creates the correct type of layer based on the selected rendering driver
 	godot::Ref<godot::RenderingNativeSurfaceApple> appleSurface = godot::RenderingNativeSurfaceApple::create(0);
 	CALayer __block *mainWindowLayer = (__bridge CALayer *)(void *)appleSurface->get_layer();
-	mainWindowLayer.bounds = CGRectMake(0, 0, screen.size.width, screen.size.height);
-	mainWindowLayer.position = CGPointMake(0, 0);
-	mainWindowLayer.anchorPoint = CGPointMake(0, 0);
-	mainWindowLayer.contentsScale = contentScaleFactor;
+	dispatch_sync(dispatch_get_main_queue(), ^{
+        mainWindowLayer.bounds = CGRectMake(0, 0, screen.size.width, screen.size.height);
+        mainWindowLayer.position = CGPointMake(0, 0);
+        mainWindowLayer.anchorPoint = CGPointMake(0, 0);
+        mainWindowLayer.contentsScale = contentScaleFactor;
+    });
 
 	godot::RenderingNativeSurface *ptr = godot::Object::cast_to<godot::RenderingNativeSurface>(appleSurface.ptr());
 	godot::Ref<godot::RenderingNativeSurface> nativeSurface(ptr);
 
 	godot::DisplayServerEmbedded::set_native_surface(nativeSurface);
 
-	instance->start();
+	const bool started = instance->start();
 
 	{
 		std::lock_guard lock(_mutex);
 
+		if (started) {
 		data->displayLink = [CADisplayLink displayLinkWithTarget:data->thread
 														selector:@selector(step:)];
 		configureGodotDisplayLink(data->displayLink);
 		[data->displayLink addToRunLoop:[NSRunLoop currentRunLoop]
 								forMode:NSRunLoopCommonModes];
+		}
 		data->mainWindowLayer = mainWindowLayer;
 		data->mainSurface = nativeSurface;
 		data->contentScaleFactor = contentScaleFactor;
 		data->handle = handle;
 
 		_instance = instance;
+		_sessionState = started ? 2 : 5;
+	}
+
+	if (!started) {
+		// Release temporary Godot references before destroying their owning engine.
+		appleSurface.unref();
+		nativeSurface.unref();
+		createLock.unlock();
+		destroy_instance();
+		_sessionState = 5;
+		log("Godot scene initialization failed", true);
+		return nullptr;
 	}
 
 	updateWindows(true);
@@ -339,10 +381,13 @@ void GodotModule::destroy_instance() {
 	std::lock_guard createLock(data->createMutex);
 
 	if (!_instance) {
+		_sessionState = 0;
 		NSLog(@"Godot instance is already destroyed.");
 		return;
 	}
 
+	_sessionState = 4;
+	++_generation;
 	if (!data->func_libgodot_destroy_godot_instance) {
 		libgodot_destroy_godot_instance_type func_libgodot_destroy_godot_instance = nullptr;
 		void *handle = nullptr;
@@ -385,10 +430,19 @@ void GodotModule::destroy_instance() {
 
 		data->func_libgodot_destroy_godot_instance(_instance->_owner);
 		_instance = nullptr;
-		godot::GDExtensionBinding::deinit();
+		#if GODOT_VERSION_MINOR < 7
+        godot::GDExtensionBinding::deinit();
+#else
+        // This binding library outlives the embedded engine. Re-resolve the
+        // interface and variant constructors on the next engine generation.
+        godot::GDExtensionBinding::api_initialized = false;
+#endif
 
 		dlclose(data->handle);
 		data->handle = nullptr;
+		data->func_libgodot_create_godot_instance = nullptr;
+		data->func_libgodot_destroy_godot_instance = nullptr;
+		_sessionState = 0;
 	}
 }
 
@@ -486,17 +540,19 @@ void GodotModule::updateState() {
 		return;
 	}
 	if (data->in_background || data->paused) {
+		_sessionState = 3;
 		if (data->displayLink) {
 			data->displayLink.paused = true;
 			[data->displayLink invalidate];
 			data->displayLink = nil;
 		}
 	} else {
+		_sessionState = 2;
 		if (!data->displayLink) {
 			[data->thread scheduleBlock:^{
 				std::lock_guard lock(_mutex);
 				ApplePlatformData *data = static_cast<ApplePlatformData *>(_data);
-				if (!_instance) {
+				if (!_instance || data->in_background || data->paused) {
 					return;
 				}
 				if (!data->displayLink) {

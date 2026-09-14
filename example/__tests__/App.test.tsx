@@ -25,6 +25,10 @@ jest.mock("expo-file-system/legacy", () => ({
   bundleDirectory: "file:///",
 }));
 
+jest.mock("react-native-worklets", () => ({
+  scheduleOnRN: (callback: (...args: unknown[]) => void, ...args: unknown[]) => callback(...args),
+}));
+
 jest.mock("expo-device", () => ({
   isDevice: false,
 }));

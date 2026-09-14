@@ -30,6 +30,9 @@
 #include "GodotModule.h"
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#if GODOT_VERSION_MINOR >= 7
+#include <godot_cpp/classes/class_db_singleton.hpp>
+#endif
 
 #include <condition_variable>
 #include <exception>
@@ -49,20 +52,33 @@
 #define NATIVE_GODOT_MODULE_PROPERTY "RTNGodot"
 
 class GodotAsyncQueue : public worklets::AsyncQueue {
+    std::function<bool()> active;
 public:
+    explicit GodotAsyncQueue(std::function<bool()> check) : active(std::move(check)) {}
 	void push(std::function<void()> &&job) override {
-		GodotModule::get_singleton()->runOnGodotThread(std::move(job));
+		GodotModule::get_singleton()->runOnGodotThread([check = active, job = std::move(job)]() mutable {
+            if (check()) job();
+        });
 	}
 };
 
+static std::function<void()> invalidatePreviousRuntime;
+
 class GodotWorkletContext : public std::enable_shared_from_this<GodotWorkletContext> {
 	jsi::Runtime *_jsRuntime;
+	std::atomic<bool> _active{true};
 	std::shared_ptr<facebook::react::CallInvoker> _jsCallInvoker;
 
 public:
 	GodotWorkletContext(jsi::Runtime *jsRuntime, std::shared_ptr<facebook::react::CallInvoker> jsCallInvoker) :
 			_jsRuntime(jsRuntime), _jsCallInvoker(std::move(jsCallInvoker)) {}
 
+	void invalidate() { _active = false; }
+	bool active() const { return _active.load(); }
+    void requireWorklet(jsi::Runtime &rt) const {
+        if (!active()) throw jsi::JSError(rt, "Godot JavaScript runtime has been invalidated");
+        if (&rt == _jsRuntime) throw jsi::JSError(rt, "Access Godot inside runOnGodotThread");
+    }
 	jsi::Runtime *getJsRuntime() const {
 		return _jsRuntime;
 	}
@@ -70,7 +86,7 @@ public:
 	void invokeOnJsThread(std::function<void(jsi::Runtime &)> &&f) const {
 		_jsCallInvoker->invokeAsync([weakSelf = weak_from_this(), f = std::move(f)]() mutable {
 			auto self = weakSelf.lock();
-			if (self) {
+			if (self && self->active()) {
 				f(*self->_jsRuntime);
 			}
 		});
@@ -121,56 +137,36 @@ class JavascriptCallable : public godot::CallableCustom {
 	std::weak_ptr<GodotWorkletContext> _workletContext;
 	std::weak_ptr<worklets::WorkletRuntime> _workletRuntime;
 	bool _isWorklet;
-	jsi::Value _funcValue;
+	uint64_t _generation = GodotModule::get_singleton()->generation();
+	inline static std::atomic<uint64_t> nextCallbackId{0};
+    const std::string callbackId = std::to_string(++nextCallbackId);
+    jsi::Value function(jsi::Runtime &rt) const {
+        return rt.global().getPropertyAsObject(rt, "__godotCallbacks").getProperty(rt, callbackId.c_str());
+    }
 
 	static bool runInContext(const JavascriptCallable *c,
-			std::function<bool(const JavascriptCallable *, jsi::Runtime &)> func) {
-		std::shared_ptr<GodotWorkletContext> wc = c->_workletContext.lock();
-		if (!wc) {
-			LOGE("WorkletContext is invalid");
-			return false;
-		}
-		{
-			std::mutex mtx;
-			std::condition_variable cv;
-			bool done = false;
-			bool success = false;
-			auto execute = [&mtx, &cv, &done, &success, &func, c](jsi::Runtime &rt) {
-				try {
-					success = func(c, rt);
-				} catch (const std::exception &exc) {
-					LOGE("JavaScript callback failed: %s", exc.what());
-				} catch (...) {
-					LOGE("JavaScript callback failed with an unknown error");
-				}
-				{
-					std::lock_guard<std::mutex> lock(mtx);
-					done = true;
-				}
-				cv.notify_one();
-			};
-			if (c->_isWorklet) {
-				std::shared_ptr<worklets::WorkletRuntime> runtime = c->_workletRuntime.lock();
-				if (!runtime) {
-					LOGE("WorkletRuntime is invalid");
-					return false;
-				}
-				runtime->schedule(std::move(execute));
-			} else {
-				wc->invokeOnJsThread(std::move(execute));
-			}
-			{
-				std::unique_lock<std::mutex> lock(mtx);
-				cv.wait(lock, [&]() { return done; });
-			}
-			return success;
-		}
-	}
+            std::function<bool(const JavascriptCallable *, jsi::Runtime &)> func) {
+        auto context = c->_workletContext.lock();
+        auto runtime = c->_workletRuntime.lock();
+        if (!context || !context->active() || !runtime ||
+                c->_generation != GodotModule::get_singleton()->generation()) return false;
+        try {
+            // Godot callbacks already run on the Godot thread. Re-enter the
+            // worklet runtime under its lock; never block waiting for the RN thread.
+            return runtime->runSync([&](jsi::Runtime &rt) { return func(c, rt); });
+        } catch (const std::exception &error) {
+            LOGE("Godot callback failed: %s", error.what());
+            return false;
+        }
+    }
 
 public:
 	JavascriptCallable(std::shared_ptr<GodotWorkletContext> workletContext, jsi::Runtime &rt, const jsi::Function &func) :
-			_workletContext(workletContext), _funcValue(jsi::Value(rt, func)) {
+			_workletContext(workletContext) {
 		_isWorklet = workletContext->getJsRuntime() != &rt;
+        if (!_isWorklet) throw jsi::JSError(rt, "Create Godot callbacks inside runOnGodotThread; use scheduleOnRN to notify React Native.");
+        if (!rt.global().hasProperty(rt, "__godotCallbacks")) rt.global().setProperty(rt, "__godotCallbacks", jsi::Object(rt));
+        rt.global().getPropertyAsObject(rt, "__godotCallbacks").setProperty(rt, callbackId.c_str(), jsi::Value(rt, func));
 		if (_isWorklet) {
 			try {
 				_workletRuntime = worklets::WorkletRuntime::getWeakRuntimeFromJSIRuntime(rt);
@@ -179,6 +175,19 @@ public:
 			}
 		}
 	}
+
+    ~JavascriptCallable() override {
+        auto context = _workletContext.lock();
+        auto runtime = _workletRuntime.lock();
+        if (!context || !context->active() || !runtime) return;
+        try {
+            runtime->runSync([&](jsi::Runtime &rt) {
+                const auto registry = rt.global().getPropertyAsObject(rt, "__godotCallbacks");
+                rt.global().getPropertyAsObject(rt, "Reflect").getPropertyAsFunction(rt, "deleteProperty")
+                    .call(rt, registry, jsi::String::createFromUtf8(rt, callbackId));
+            });
+        } catch (...) { /* Runtime teardown owns any remaining registry entries. */ }
+    }
 
 	uint32_t hash() const override {
 		return 0; // Use default hash function
@@ -233,8 +242,8 @@ public:
 			{
 				bool result = false;
 				runInContext(j_a, [&j_a, &j_b, &result](const JavascriptCallable *c, jsi::Runtime &rt) {
-					const jsi::Value &a_funcRef_value = j_a->_funcValue;
-					const jsi::Value &b_funcRef_value = j_b->_funcValue;
+					const jsi::Value &a_funcRef_value = j_a->function(rt);
+					const jsi::Value &b_funcRef_value = j_b->function(rt);
 
 					if (!a_funcRef_value.isObject()) {
 						result = false;
@@ -291,6 +300,12 @@ static godot::Callable createJSCallable(std::shared_ptr<GodotWorkletContext> wor
 
 class GodotHostObject : public jsi::HostObject {
 	std::shared_ptr<GodotWorkletContext> _workletContext;
+    uint64_t _generation = GodotModule::get_singleton()->generation();
+    void requireCurrent(jsi::Runtime &rt) const {
+        _workletContext->requireWorklet(rt);
+        if (_generation != GodotModule::get_singleton()->generation() || !GodotModule::get_singleton()->get_instance())
+            throw jsi::JSError(rt, "Godot object belongs to a retired engine generation");
+    }
 	godot::Variant _value;
 
 public:
@@ -316,6 +331,7 @@ public:
 			jsi::Object o = value.asObject(rt);
 			if (o.isHostObject(rt)) {
 				std::shared_ptr<GodotHostObject> ho = o.getHostObject<GodotHostObject>(rt);
+				ho->requireCurrent(rt);
 				return ho->_value;
 			}
 			if (o.isFunction(rt)) {
@@ -421,6 +437,7 @@ public:
 			jsi::HostObject(), _workletContext(workletContext), _value(v) {}
 
 	jsi::Value get(jsi::Runtime &rt, const jsi::PropNameID &name) override {
+        requireCurrent(rt);
 		godot::StringName propName(name.utf8(rt).c_str());
 		if (_value.get_type() == godot::Variant::Type::NIL) {
 			return jsi::Value(nullptr);
@@ -439,6 +456,7 @@ public:
 				}
 
 				std::shared_ptr<GodotHostObject> ho = obj.getHostObject<GodotHostObject>(rt);
+                ho->requireCurrent(rt);
 				std::vector<godot::Variant> godotArgs;
 				godotArgs.reserve(count);
 				for (size_t i = 0; i < count; ++i) {
@@ -467,6 +485,7 @@ public:
 	}
 
 	void set(jsi::Runtime &rt, const jsi::PropNameID &name, const jsi::Value &value) override {
+        requireCurrent(rt);
 		godot::StringName propName(name.utf8(rt).c_str());
 		bool r_valid = false;
 		_value.set_named(propName, jsiValueToGodotVariant(_workletContext, rt, value), r_valid);
@@ -491,10 +510,17 @@ public:
 		return jsi::Value(rt, ctorFunc);
 	}
 
-	static jsi::Value createStaticFunction(std::shared_ptr<GodotWorkletContext> workletContext, jsi::Runtime &rt, std::string name, GDExtensionMethodBindPtr mb) {
-		jsi::Function f = jsi::Function::createFromHostFunction(rt, jsi::PropNameID::forUtf8(rt, name), 0, [name, mb, workletContext](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) {
-			std::vector<godot::Variant> godotArgs;
-			godotArgs.reserve(count);
+	static jsi::Value createStaticFunction(std::shared_ptr<GodotWorkletContext> workletContext, jsi::Runtime &rt, std::string className, std::string name, GDExtensionMethodBindPtr mb) {
+        const uint64_t generation = GodotModule::get_singleton()->generation();
+		jsi::Function f = jsi::Function::createFromHostFunction(rt, jsi::PropNameID::forUtf8(rt, name), 0, [name, className, mb, workletContext, generation](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) {
+			workletContext->requireWorklet(rt);
+            if (generation != GodotModule::get_singleton()->generation()) throw jsi::JSError(rt, "Static method belongs to a retired engine generation");
+            std::vector<godot::Variant> godotArgs;
+			godotArgs.reserve(count + 2);
+#if GODOT_VERSION_MINOR >= 7
+            godotArgs.emplace_back(godot::StringName(className.c_str()));
+            godotArgs.emplace_back(godot::StringName(name.c_str()));
+#endif
 			for (size_t i = 0; i < count; ++i) {
 				godotArgs.push_back(GodotHostObject::jsiValueToGodotVariant(workletContext, rt, args[i]));
 			}
@@ -502,7 +528,12 @@ public:
 			godot::Variant r_ret;
 			GDExtensionCallError r_error;
 
-			godot::internal::gdextension_interface_object_method_bind_call(mb, nullptr, (GDExtensionConstVariantPtr *)variantArgs.data(), count, &r_ret, &r_error);
+#if GODOT_VERSION_MINOR >= 7
+            godot::Variant classDB(godot::ClassDBSingleton::get_singleton());
+            classDB.callp("class_call_static", variantArgs.data(), variantArgs.size(), r_ret, r_error);
+#else
+            godot::internal::gdextension_interface_object_method_bind_call(mb, nullptr, (GDExtensionConstVariantPtr *)variantArgs.data(), count, &r_ret, &r_error);
+#endif
 			if (r_error.error != GDEXTENSION_CALL_OK) {
 				throw jsi::JSINativeException(create_method_call_error_string(name, r_error));
 			}
@@ -528,12 +559,20 @@ public:
 			godot::Dictionary d = methodList[i];
 			godot::StringName methodName = (godot::StringName)d["name"];
 			// LOGI("Method name: %s", methodName.to_utf8_buffer().ptr());
-			bool isStatic = (bool)d["is_static"];
+			#if GODOT_VERSION_MINOR >= 7
+            bool isStatic = (int64_t(d["flags"]) & godot::METHOD_FLAG_STATIC) != 0;
+#else
+            bool isStatic = (bool)d["is_static"];
+#endif
 			if (isStatic) {
-				int64_t methodHash = (int64_t)d["hash"];
-				GDExtensionMethodBindPtr mb = godot::internal::gdextension_interface_classdb_get_method_bind(godotClassName._native_ptr(), methodName._native_ptr(), methodHash);
+#if GODOT_VERSION_MINOR >= 7
+                GDExtensionMethodBindPtr mb = nullptr; // Upstream ClassDB performs dynamic static calls.
+#else
+                int64_t methodHash = (int64_t)d["hash"];
+                GDExtensionMethodBindPtr mb = godot::internal::gdextension_interface_classdb_get_method_bind(godotClassName._native_ptr(), methodName._native_ptr(), methodHash);
+#endif
 				std::string methodNameStd = (const char *)methodName.to_utf8_buffer().ptr();
-				ctorFunc.setProperty(rt, methodNameStd.c_str(), createStaticFunction(workletContext, rt, methodNameStd, mb));
+				ctorFunc.setProperty(rt, methodNameStd.c_str(), createStaticFunction(workletContext, rt, name, methodNameStd, mb));
 			}
 		}
 		return jsi::Value(rt, ctorFunc);
@@ -625,7 +664,7 @@ void JavascriptCallable::call(const godot::Variant **p_arguments, int p_argcount
 			r_call_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
 			return false;
 		}
-		const jsi::Value &val = c->_funcValue;
+		const jsi::Value &val = c->function(rt);
 		if (!val.isObject()) {
 			// Func ref no longer valid
 			r_call_error.error = GDEXTENSION_CALL_ERROR_INVALID_METHOD;
@@ -654,16 +693,26 @@ void JavascriptCallable::call(const godot::Variant **p_arguments, int p_argcount
 }
 
 jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<facebook::react::CallInvoker> &callInvoker) {
-	// Perform initialization
+	// A new RN runtime gets a fresh engine; old callbacks are invalidated
+    // before its worklet queue can issue any new scene operations.
+    if (invalidatePreviousRuntime) {
+        invalidatePreviousRuntime();
+        GodotModule::get_singleton()->runOnGodotThread([]() {
+            GodotModule::get_singleton()->destroy_instance();
+        });
+    }
 
 	std::shared_ptr<GodotWorkletContext> workletContext =
 			std::make_shared<GodotWorkletContext>(&rt, callInvoker);
+    invalidatePreviousRuntime = [weak = std::weak_ptr<GodotWorkletContext>(workletContext)]() {
+        if (auto context = weak.lock()) context->invalidate();
+    };
 
 	LOGI("NativeGodotModule::createNativeModule");
 
-	auto createGodotQueueFunc = [](jsi::Runtime &runtime, const jsi::Value &thisValue, const jsi::Value *arguments, size_t count) -> jsi::Value {
+	auto createGodotQueueFunc = [workletContext](jsi::Runtime &runtime, const jsi::Value &thisValue, const jsi::Value *arguments, size_t count) -> jsi::Value {
 		jsi::Object queue(runtime);
-		queue.setNativeState(runtime, std::make_shared<GodotAsyncQueue>());
+		queue.setNativeState(runtime, std::make_shared<GodotAsyncQueue>([weak = std::weak_ptr<GodotWorkletContext>(workletContext)]() { auto context = weak.lock(); return context && context->active(); }));
 		return queue;
 	};
 
@@ -682,6 +731,7 @@ jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<faceb
 	};
 
 	auto createInstanceFunc = [workletContext](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) {
+        workletContext->requireWorklet(rt);
 		std::vector<std::string> godotArgs;
 
 		if (count < 1) {
@@ -724,6 +774,7 @@ jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<faceb
 	};
 
 	auto getInstanceFunc = [workletContext](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) {
+        workletContext->requireWorklet(rt);
 		GodotModule *mod = GodotModule::get_singleton();
 		godot::GodotInstance *instance = mod->get_instance();
 		if (instance == nullptr) {
@@ -741,10 +792,12 @@ jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<faceb
 	};
 
 	auto APIFunc = [workletContext](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) {
+        workletContext->requireWorklet(rt);
 		return jsi::Object::createFromHostObject(rt, std::shared_ptr<jsi::HostObject>(std::make_shared<GodotAPIObject>(workletContext, rt)));
 	};
 
-	auto destroyInstanceFunc = [](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) {
+	auto destroyInstanceFunc = [workletContext](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args, size_t count) {
+        workletContext->requireWorklet(rt);
 		GodotModule *mod = GodotModule::get_singleton();
 		mod->destroy_instance();
 		return jsi::Value::undefined();
@@ -788,6 +841,15 @@ jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<faceb
 			destroyInstanceFunc);
 
 	jsi::Object o(rt);
+	o.setProperty(rt, "getSessionStatus", jsi::Function::createFromHostFunction(rt,
+            jsi::PropNameID::forUtf8(rt, "getSessionStatus"), 0,
+            [](jsi::Runtime &runtime, const jsi::Value &, const jsi::Value *, size_t) {
+                auto *module = GodotModule::get_singleton();
+                jsi::Object status(runtime);
+                status.setProperty(runtime, "generation", (double)module->generation());
+                status.setProperty(runtime, "state", module->session_state());
+                return status;
+            }));
 	o.setProperty(rt, jsi::PropNameID::forUtf8(rt, "createGodotQueue"), createGodotQueue);
 	o.setProperty(rt, jsi::PropNameID::forUtf8(rt, "createInstance"), createInstance);
 	o.setProperty(rt, jsi::PropNameID::forUtf8(rt, "getInstance"), getInstance);
@@ -812,6 +874,7 @@ NativeGodotModule::NativeGodotModule(std::shared_ptr<CallInvoker> jsInvoker) :
 
 bool NativeGodotModule::installTurboModule(jsi::Runtime &rt) {
 	jsi::Value godotModule = createNativeGodotModule(rt, jsInvoker_);
+	invalidateRuntime = invalidatePreviousRuntime;
 
 	rt.global().setProperty(rt, NATIVE_GODOT_MODULE_PROPERTY, godotModule);
 	if (!rt.global().getProperty(rt, NATIVE_GODOT_MODULE_PROPERTY).isObject()) {

@@ -5,6 +5,7 @@
  * @format
  */
 
+import IntegrationHarness from './IntegrationHarness';
 import 'setimmediate'; // Required by New Architecture
 import React, {useEffect} from 'react';
 import {
@@ -200,7 +201,7 @@ function SubWindow({
   );
 }
 
-const App = () => {
+export const LegacyApp = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="MainWindow">
@@ -242,4 +243,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+export default IntegrationHarness;

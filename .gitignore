@@ -14,3 +14,10 @@
 .gradle/
 .cxx/
 .DS_Store
+
+.godot-toolchain.json
+engine/framework/libgodot/libgodot.a
+engine/framework/build/
+engine/__pycache__/
+example/__pycache__/
+example/harness/**/.godot/

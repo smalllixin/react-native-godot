@@ -37,6 +37,7 @@ export interface Spec extends TurboModule {
 const GodotInstaller = TurboModuleRegistry.get<Spec>("NativeGodotModule");
 
 export interface GodotModuleInterface {
+  getSessionStatus(): { generation: number; state: number };
   createInstance(args: Array<string>): any;
   getInstance(): any;
   API(): any;

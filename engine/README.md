@@ -2,9 +2,10 @@
 
 This fork retains TurboModule/Fabric and Worklets. It ports the iOS embedding
 surface to upstream Godot 4.7.2; it does not replace upstream LibGodot's creation
-API. The candidate remains **unqualified** until both Simulator and physical
-Apple-device acceptance pass. The published 4.5.1.migeran.2 artifacts remain the
-baseline.
+API. Godot 4.7.2 is House of G's **development default** after Simulator and
+physical iPhone reload/interaction checks. Production qualification remains
+incomplete; see [the ledger](qualification.md). The published 4.5.1.migeran.2
+artifacts remain the rollback baseline.
 
 ## Build
 

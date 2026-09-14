@@ -1,7 +1,9 @@
 # Qualification ledger
 
-Status: in progress. **Godot 4.7.2 is not promoted.** House of G keeps its
-4.5.1 engine selection. No registry package or engine release has been published.
+Status: **Godot 4.7.2 is selected for House of G development** as of 2026-09-14.
+Production qualification remains in progress. 4.5.1 is retained for rollback; no
+registry package or engine release has been published. Earlier entries below
+describe the historical progression.
 
 ## Current Simulator evidence — 2026-09-14
 
@@ -107,3 +109,38 @@ CocoaPods, allowing the upstream build scripts to restore matching binaries.
 No new physical-device installation or recording was performed after the user
 paused phone testing. Physical qualification, the full performance comparison,
 and the remaining acceptance cases above are still required before promotion.
+
+## Physical and daily-development follow-up — 2026-09-14
+
+Validated bridge code: `6ded55acdc1f407859bfc0c97af06e2d7bd8464e`
+(`1.0.2-smalllixin.3`), Expo 57.0.20 / RN 0.86.3 / Worklets 0.10.1.
+Candidate Release engine archive SHA-256:
+`2115bb170205f37c3e23db1881b3795975668afee8262ac80fab270317ffc088`;
+bindings archive:
+`6f9feb2ea3ca9d9bccfddf4bdba2cd3817fa747e6b05b75257dea4b8c63bbd88`.
+
+- Baseline and candidate physical iPhone 17 Pro Release two-minute smoke runs
+  completed at approximately 30 drawn frames/second. These are short smoke tests,
+  not the original twenty-minute thermal/frame-time certification.
+- The candidate native Debug app with the Release engine completed five warm-up
+  plus twenty measured restarts on iPhone. Native `phys_footprint` measurements
+  ranged 887.3–1002.6 MiB, ending at 922.1 MiB; there was no sustained upward trend.
+  Whole-app Debug overhead is included. Godot's own Release memory counter is
+  unavailable and must not be interpreted as zero allocated bytes.
+- Simulator completed fifty restarts in two batches; the second measured batch
+  stayed within 530.6–533.2 MiB. The captured Simulator memgraph reported zero leaks.
+- A Vivarium edit automatically exported/validated a new immutable pack. Explicit
+  Reload World on both Simulator and iPhone applied it without rebuilding native
+  code. Reports confirmed draft and native surface preservation.
+- The app scene's picking ray was corrected for its safe-area offset. Phone
+  diagnostics recorded thirteen drag events and one actual G pick. The user
+  completed chat/keyboard, reading, tarot, You and background/resume without an
+  observed issue; scene events showed no restart during those interactions.
+- Headless rooftop checks, including picking after orbit with a nonzero safe area,
+  125 mobile tests, TypeScript checking and configuration/artifact doctor passed.
+
+Evidence: House of G `artifacts/rooftop/daily-472/`, plus the two quick-device
+Release reports. Product config now selects candidate with qualification
+`development-qualified-production-pending`. The complete lifecycle/input failure
+matrix, full accessibility checks and extended Release performance qualification
+remain required before production promotion.

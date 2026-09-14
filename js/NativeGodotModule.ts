@@ -38,6 +38,8 @@ const GodotInstaller = TurboModuleRegistry.get<Spec>("NativeGodotModule");
 
 export interface GodotModuleInterface {
   getSessionStatus(): { generation: number; state: number };
+  /** Whole-process iOS/macOS memory; null if unavailable. Includes allocations outside Godot. */
+  getProcessMetrics(): { physicalFootprintBytes: number; residentBytes: number } | null;
   createInstance(args: Array<string>): any;
   getInstance(): any;
   API(): any;

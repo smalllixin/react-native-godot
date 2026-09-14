@@ -41,6 +41,9 @@
 #include <mutex>
 #include <string>
 #include <utility>
+#ifdef __APPLE__
+#include <mach/mach.h>
+#endif
 
 #ifdef ON_ANDROID
 #include <fbjni/fbjni.h>
@@ -841,6 +844,25 @@ jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<faceb
 			destroyInstanceFunc);
 
 	jsi::Object o(rt);
+	o.setProperty(rt, "getProcessMetrics", jsi::Function::createFromHostFunction(rt,
+            jsi::PropNameID::forUtf8(rt, "getProcessMetrics"), 0,
+            [](jsi::Runtime &runtime, const jsi::Value &, const jsi::Value *, size_t) -> jsi::Value {
+#ifdef __APPLE__
+                task_vm_info_data_t info = {};
+                mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+                if (task_info(mach_task_self(), TASK_VM_INFO,
+                        reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS
+                        || count < TASK_VM_INFO_REV1_COUNT) {
+                    return jsi::Value::null();
+                }
+                jsi::Object metrics(runtime);
+                metrics.setProperty(runtime, "physicalFootprintBytes", static_cast<double>(info.phys_footprint));
+                metrics.setProperty(runtime, "residentBytes", static_cast<double>(info.resident_size));
+                return metrics;
+#else
+                return jsi::Value::null();
+#endif
+            }));
 	o.setProperty(rt, "getSessionStatus", jsi::Function::createFromHostFunction(rt,
             jsi::PropNameID::forUtf8(rt, "getSessionStatus"), 0,
             [](jsi::Runtime &runtime, const jsi::Value &, const jsi::Value *, size_t) {

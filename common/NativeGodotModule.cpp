@@ -348,7 +348,8 @@ public:
 			case godot::Variant::Type::FLOAT: {
 				return jsi::Value((double)variant);
 			}
-			case godot::Variant::Type::STRING: {
+			case godot::Variant::Type::STRING:
+			case godot::Variant::Type::STRING_NAME: {
 				godot::String s = variant;
 				// JSI expects a byte length; String::length counts Unicode code points.
 				// Retain the UTF-8 buffer for the duration of the conversion.
@@ -377,10 +378,6 @@ public:
 			// misc types
 			case godot::Variant::Type::COLOR: {
 				return jsi::Object::createFromHostObject(rt, std::shared_ptr<HostObject>(new GodotHostObject(workletContext, variant)));
-			}
-			case godot::Variant::Type::STRING_NAME: {
-				godot::StringName sn = variant;
-				return jsi::String::createFromUtf8(rt, sn.to_utf8_buffer().ptr(), sn.length());
 			}
 			case godot::Variant::Type::NODE_PATH:
 			case godot::Variant::Type::RID: {

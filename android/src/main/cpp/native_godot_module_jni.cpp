@@ -25,6 +25,7 @@
 
 #include "native_godot_module_jni.h"
 #include <NativeGodotModule.h>
+#include "GodotModule.h"
 
 #define LOG_TAG "NativeGodotModuleJNI"
 #include "godot-log.h"
@@ -45,6 +46,8 @@ void NativeGodotModuleJNI::registerNatives() {
 	registerHybrid({
 			makeNativeMethod("initHybrid", NativeGodotModuleJNI::initHybrid),
 			makeNativeMethod("installTurboModule", NativeGodotModuleJNI::installTurboModule),
+            makeNativeMethod("invalidateRuntimeNative", NativeGodotModuleJNI::invalidateRuntimeNative),
+            makeNativeMethod("setAppActive", NativeGodotModuleJNI::setAppActive),
 	});
 }
 
@@ -59,6 +62,7 @@ bool NativeGodotModuleJNI::installTurboModule() {
 
 	jsi::Runtime &rnRuntime = *rnRuntime_;
 	jsi::Value godotModule = createNativeGodotModule(rnRuntime, callInvoker_);
+    invalidateRuntime = currentGodotRuntimeInvalidator();
 	if (!godotModule.isObject()) {
 		LOGE("Could not install NativeGodotModule.");
 		return false;
@@ -73,3 +77,12 @@ NativeGodotModuleJNI::NativeGodotModuleJNI(
 		javaPart_(jni::make_global(jThis)),
 		rnRuntime_(rnRuntime),
 		callInvoker_(jsCallInvoker) {}
+
+void NativeGodotModuleJNI::invalidateRuntimeNative() {
+    if (invalidateRuntime) { invalidateRuntime(); invalidateRuntime = nullptr; }
+    rnRuntime_ = nullptr;
+}
+void NativeGodotModuleJNI::setAppActive(bool active) {
+    if (active) GodotModule::get_singleton()->appResume();
+    else GodotModule::get_singleton()->appPause();
+}

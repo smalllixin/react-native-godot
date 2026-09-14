@@ -51,7 +51,8 @@ into the RN runtime synchronously from Godot is unsupported.
 
 The initial port targets Metal/Mobile, native touch input, and one main surface.
 SDL controllers, standalone iOS application startup, and engine-owned iOS plugins
-are excluded from library mode. Android remains on its existing baseline.
+are excluded from the iOS library mode. The separate [Android port](android.md)
+uses its own source patch series and artifacts.
 `migeran-audit.json` records what was ported, already upstream, or left to runtime
 parity review. Unreviewed parity items are not presumed unnecessary.
 

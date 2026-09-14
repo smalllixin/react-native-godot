@@ -1,6 +1,6 @@
 {
   "name": "@borndotcom/react-native-godot",
-  "version": "1.0.2-smalllixin.3",
+  "version": "1.0.2-smalllixin.4",
   "summary": "React Native Godot",
   "description": "Embed Godot into React Native apps",
   "main": "lib/commonjs/index",
@@ -144,22 +144,24 @@
     {
       "name": "libgodot-android",
       "filename": "libgodot-android.zip",
-      "version": "4.5.1.migeran.2",
-      "base_url": "https://github.com/migeran/libgodot/releases/download/",
-      "shasum": "5ad2b0d836e6a207ca695e690ed833326e6aba35f43a788bf17c15eb33475783",
+      "version": "4.7.2.hog.android.1",
+      "base_url": "",
+      "shasum": "55e84c7e229e6e693f8a72c8729febcb38dc5f954d3f657a70f5f86bb5081f7c",
       "destination_base_dir": "android/libs",
       "env": "LIBGODOT_ANDROID_PATH",
-      "no_unpack": "false"
+      "no_unpack": "false",
+      "mavenArtifact": "godot"
     },
     {
       "name": "libgodot-cpp-android",
       "filename": "godot-cpp-android.zip",
-      "version": "4.5.1.migeran.2",
-      "base_url": "https://github.com/migeran/libgodot/releases/download/",
-      "shasum": "cdf543419a2397dcdcd25d8266f66cf3200cca3dd1b53c161b1b89e819dab21e",
+      "version": "4.7.2.hog.android.1",
+      "base_url": "",
+      "shasum": "8f15abadca7059570d16206d78565b4c426064c60eb43ffa10aba661b4195e9d",
       "destination_base_dir": "android/libs",
       "env": "LIBGODOT_CPP_ANDROID_PATH",
-      "no_unpack": "false"
+      "no_unpack": "false",
+      "mavenArtifact": "godot"
     }
   ],
   "react-native-builder-bob": {

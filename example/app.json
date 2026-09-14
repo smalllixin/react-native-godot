@@ -7,6 +7,10 @@
         "iosPacks": [
           "GodotTest.pck",
           "GodotTest2.pck"
+        ],
+        "androidPacks": [
+          "packs/android/GodotTest.pck",
+          "packs/android/GodotTest2.pck"
         ]
       }
     ]

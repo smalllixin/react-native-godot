@@ -41,7 +41,7 @@ import com.migeran.NativeGodotModuleSpec;
 
 @OptIn(markerClass = FrameworkAPI.class)
 @ReactModule(name = NativeGodotModule.NAME)
-public class NativeGodotModule extends NativeGodotModuleSpec {
+public class NativeGodotModule extends NativeGodotModuleSpec implements com.facebook.react.bridge.LifecycleEventListener {
 	public static final String NAME = "NativeGodotModule";
 
 	@DoNotStrip
@@ -66,7 +66,19 @@ public class NativeGodotModule extends NativeGodotModuleSpec {
 		mHybridData = initHybrid(
 				Objects.requireNonNull(context.getJavaScriptContextHolder()).get(),
 				(CallInvokerHolderImpl)callInvokerHolder);
+        context.addLifecycleEventListener(this);
 	}
+
+    @Override public void onHostResume() { setAppActive(true); }
+    @Override public void onHostPause() { setAppActive(false); }
+    @Override public void onHostDestroy() { setAppActive(false); }
+    @Override public void invalidate() {
+        getReactApplicationContext().removeLifecycleEventListener(this);
+        invalidateRuntimeNative();
+        super.invalidate();
+    }
+    private native void setAppActive(boolean active);
+    private native void invalidateRuntimeNative();
 
 	private native HybridData initHybrid(long jsContext, CallInvokerHolderImpl jsCallInvokerHolder);
 

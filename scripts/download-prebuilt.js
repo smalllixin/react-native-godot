@@ -29,6 +29,7 @@ try {
   if (!entries?.length) throw new Error('No native artifacts available for this profile. Build and record candidate checksums first.');
   fs.mkdirSync(cache, { recursive: true });
   const selected = entries.filter((entry) => platform === 'all' || entry.destination_base_dir.startsWith(platform + '/'));
+  if (!selected.length) throw new Error('No native artifacts for platform: ' + platform);
   for (const entry of selected) {
     if (!/^[a-f0-9]{64}$/.test(entry.shasum)) throw new Error('Missing SHA-256 for ' + entry.name);
     const destination = path.join(root, entry.destination_base_dir, entry.name, entry.version);
@@ -45,6 +46,7 @@ try {
       const temporary = archive + '.download';
       const local = entry.env && process.env[entry.env];
       if (local) fs.copyFileSync(local, temporary);
+      else if (!entry.base_url) throw new Error(`Build ${entry.name} with engine/build_android.py and set ${entry.env} to its verified archive`);
       else execFileSync('curl', ['--fail', '--location', '--silent', '--show-error', '--output', temporary, `${entry.base_url}${entry.version}/${entry.filename}`], { stdio: 'inherit' });
       if (digest(temporary) !== entry.shasum) { fs.unlinkSync(temporary); throw new Error('Checksum mismatch: ' + entry.name); }
       fs.renameSync(temporary, archive);
@@ -60,7 +62,13 @@ try {
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
     console.log('Installed verified ' + entry.name + ' ' + entry.version);
   }
-  if (profile) fs.writeFileSync(path.join(root, '.godot-toolchain.json'), JSON.stringify({ prebuiltFiles: entries }, null, 2));
+  if (profile) {
+    const file = path.join(root, '.godot-toolchain.json');
+    const previous = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).prebuiltFiles : [];
+    const merged = new Map(previous.map(entry => [entry.name, entry]));
+    for (const entry of selected) merged.set(entry.name, entry);
+    fs.writeFileSync(file, JSON.stringify({ prebuiltFiles: [...merged.values()] }, null, 2));
+  }
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

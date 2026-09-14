@@ -1,3 +1,7 @@
+#ifdef __ANDROID__
+#include <cstdio>
+#include <unistd.h>
+#endif
 /**************************************************************************/
 /*  NativeGodotModule.cpp                                                 */
 /**************************************************************************/
@@ -66,6 +70,7 @@ public:
 };
 
 static std::function<void()> invalidatePreviousRuntime;
+std::function<void()> currentGodotRuntimeInvalidator() { return invalidatePreviousRuntime; }
 
 class GodotWorkletContext : public std::enable_shared_from_this<GodotWorkletContext> {
 	jsi::Runtime *_jsRuntime;
@@ -858,6 +863,15 @@ jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<faceb
                 jsi::Object metrics(runtime);
                 metrics.setProperty(runtime, "physicalFootprintBytes", static_cast<double>(info.phys_footprint));
                 metrics.setProperty(runtime, "residentBytes", static_cast<double>(info.resident_size));
+                return metrics;
+#elif defined(__ANDROID__)
+                FILE *file = fopen("/proc/self/statm", "r");
+                if (!file) return jsi::Value::null();
+                unsigned long pages = 0, resident = 0;
+                const int read = fscanf(file, "%lu %lu", &pages, &resident); fclose(file);
+                if (read != 2) return jsi::Value::null();
+                jsi::Object metrics(runtime);
+                metrics.setProperty(runtime, "residentBytes", static_cast<double>(resident) * sysconf(_SC_PAGESIZE));
                 return metrics;
 #else
                 return jsi::Value::null();

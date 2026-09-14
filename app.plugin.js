@@ -1,14 +1,22 @@
 const path = require("node:path");
+const fs = require("node:fs");
 const {
   IOSConfig,
   withGradleProperties,
+  withDangerousMod,
   withXcodeProject,
 } = require("expo/config-plugins");
-const { prebuiltFiles } = require("./package.json");
+const toolchainPath = path.join(__dirname, ".godot-toolchain.json");
+const prebuiltFiles = [
+  ...(fs.existsSync(toolchainPath)
+    ? JSON.parse(fs.readFileSync(toolchainPath, "utf8")).prebuiltFiles
+    : []),
+  ...require("./package.json").prebuiltFiles,
+];
 
 const ANDROID_PROPERTIES = {
   "android.minSdkVersion": "29",
-  "reactNativeArchitectures": "armeabi-v7a,arm64-v8a",
+  "reactNativeArchitectures": "arm64-v8a",
 };
 const GODOT_MAVEN_PROPERTY = "android.extraMavenRepos";
 const libGodotAndroid = prebuiltFiles.find(
@@ -116,5 +124,26 @@ function withGodotPacks(config, iosPacks) {
   });
 }
 
-module.exports = (config, { iosPacks = [] } = {}) =>
-  withGodotPacks(withGodotAndroid(config), iosPacks);
+module.exports = (config, { iosPacks = [], androidPacks = [] } = {}) => {
+  config = withGodotPacks(withGodotAndroid(config), iosPacks);
+  if (!androidPacks.length) return config;
+  return withDangerousMod(config, [
+    "android",
+    (mod) => {
+      const destination = path.join(
+        mod.modRequest.platformProjectRoot,
+        "app/src/main/assets"
+      );
+      fs.mkdirSync(destination, { recursive: true });
+      for (const pack of androidPacks) {
+        const source = path.resolve(mod.modRequest.projectRoot, pack);
+        if (!fs.existsSync(source))
+          throw new Error(
+            `Missing Godot pack ${pack}; export the fixtures first.`
+          );
+        fs.copyFileSync(source, path.join(destination, path.basename(pack)));
+      }
+      return mod;
+    },
+  ]);
+};

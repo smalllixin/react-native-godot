@@ -93,9 +93,10 @@ def reactNativeRootDir = resolveReactNativeDirectory()
 
 def prefabHeadersDir = project.file("$buildDir/prefab-headers/rtngodot")
 
-def getPrebuiltLibraryVersion(libName) {
+def getPrebuiltLibraryEntry(libName) {
     // package.json resides at the repository root (one level up from android/)
-    def packageFile = file("$projectDir/../package.json")
+    def installedProfile = file("$projectDir/../.godot-toolchain.json")
+    def packageFile = installedProfile.exists() ? installedProfile : file("$projectDir/../package.json")
     if (!packageFile.exists()) {
         throw new GradleException("Unable to locate package.json at ${packageFile}")
     }
@@ -108,11 +109,11 @@ def getPrebuiltLibraryVersion(libName) {
         throw new GradleException("Prebuilt entry not found for library '${libName}'. Ensure it exists in package.json.")
     }
 
-    return entry.version
+    return entry
 }
 
-def libGodotVersion = getPrebuiltLibraryVersion("libgodot-android")
-def godotCppVersion = getPrebuiltLibraryVersion("libgodot-cpp-android")
+def libGodotVersion = getPrebuiltLibraryEntry("libgodot-android").version
+def godotCppVersion = getPrebuiltLibraryEntry("libgodot-cpp-android").version
 def libGodotMavenRepo = file("$projectDir/libs/libgodot-android/${libGodotVersion}").canonicalFile
 
 if (!libGodotMavenRepo.isDirectory()) {
@@ -275,7 +276,7 @@ repositories {
 dependencies {
   implementation 'com.facebook.react:react-native'
   implementation project(':react-native-worklets')
-  api "com.migeran.libgodot:godot-debug:${libGodotVersion}-SNAPSHOT"
+  api "com.migeran.libgodot:${getPrebuiltLibraryEntry('libgodot-android').mavenArtifact ?: 'godot-debug'}:${libGodotVersion}-SNAPSHOT"
 }
 
 task deleteCmakeCache() {

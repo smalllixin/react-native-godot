@@ -1,4 +1,4 @@
-> **Fork background:** House of G uses this fork of Born/Migeran’s React Native bridge to keep Vivarium’s Godot world beneath Expo UI. We maintain Godot 4.7.2 iOS embedding, lifecycle/reload fixes, and process-memory diagnostics; 4.5.1 remains a rollback configuration. See [builds and qualification](engine/README.md).
+> **Fork background:** House of G uses this fork of Born/Migeran’s React Native bridge to keep Vivarium’s Godot world beneath Expo UI. We maintain Godot 4.7.2 iOS embedding, an Android ARM64 port under qualification, lifecycle/reload fixes, and process-memory diagnostics; 4.5.1 remains a rollback configuration. See [builds and qualification](engine/README.md).
 
 ![Cover-21](https://github.com/user-attachments/assets/770e4972-84f7-433e-87db-6391601256ba)
 Born React Native Godot

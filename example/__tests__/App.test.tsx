@@ -17,7 +17,7 @@ jest.mock("@borndotcom/react-native-godot", () => {
       resume: jest.fn(),
     },
     RTNGodotView: (props: object) => React.createElement(View, props),
-    runOnGodotThread: jest.fn(() => Promise.resolve()),
+    runOnGodotThread: jest.fn(() => Promise.resolve({scene: {frames: 3, variant: "a"}, engine: "4.7.2", native: {generation: 1, state: 2}})),
   };
 });
 

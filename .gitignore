@@ -21,3 +21,7 @@ engine/framework/build/
 engine/__pycache__/
 example/__pycache__/
 example/harness/**/.godot/
+
+example/.env.local
+example/packs/
+example/harness/**/project.binary

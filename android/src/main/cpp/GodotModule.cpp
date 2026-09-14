@@ -37,6 +37,7 @@
 
 #include <android/choreographer.h>
 #include <android/looper.h>
+#include <fstream>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <dlfcn.h>
@@ -254,6 +255,22 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 	}
 
 	_generation.fetch_add(1); _sessionState = 1;
+    // Main::setup's early failure cleanup is not reentrant after a prior session.
+    // Reject unusable standalone packs before allocating any engine state.
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (args[i] != "--main-pack") continue;
+        char magic[4] = {};
+        if (i + 1 < args.size()) {
+            std::ifstream pack(args[i + 1], std::ios::binary);
+            pack.read(magic, sizeof(magic));
+        }
+        if (std::string(magic, sizeof(magic)) != "GDPC") {
+            LOGE("Cannot initialize world: main pack is missing, unreadable, or has an invalid PCK header.");
+            _sessionState = 5;
+            return nullptr;
+        }
+        break;
+    }
 	void *handle = data->handle;
 	if (!data->func_libgodot_create_godot_instance_android) {
 		libgodot_create_godot_instance_android_type func_libgodot_create_godot_instance_android = nullptr;

@@ -61,3 +61,24 @@ and keep all Godot object access inside `runOnGodotThread`. Rebuild native depen
 
 The downloaded engine assets retain upstream SHA-256 verification. No unverified 4.7
 binary, credentials, app data or proprietary scene assets are included in this fork.
+
+## Validation of the fork
+
+Code revision tested: `467591bc4833fb55c65e699a7888b87a411a3905`.
+
+- Clean `pnpm install` from the pinned Git URL generated CommonJS, ESM and TypeScript
+  entry points. A `prepare` build is included for Git consumers.
+- Library TypeScript, lint, package build and its mocked example test passed.
+- Consumer Expo 57.0.20 / RN 0.86.3 / Worklets 0.10.1: TypeScript, uncached lint,
+  98 unit tests, native iOS simulator build/run and signed Release build passed.
+- Native runtime diagnostics returned `4.5.1-migeran.2 (custom_build)`, max FPS 30,
+  and exact `你好，G 🐈` round trips through both Godot String and StringName results.
+- A clean launch followed by explicit engine stop/start, native sheet open/dismiss,
+  return to the persistent world and Godot-to-JS event delivery passed in the simulator.
+- Editing worklet code during an earlier restart test caused a development reload that
+  interrupted the app. Full JS-runtime reload remains unqualified; the clean restart
+  test above was repeated without source changes. Physical iPhone, Android and long
+  lifecycle/performance sessions remain pending. This is an evaluation branch.
+
+[Captured 4.7.2 build-probe result](godot-4.7.2-ios-probe.json) records exit code 255.
+The official-source checkout is unchanged; no engine port or newer binary is claimed.

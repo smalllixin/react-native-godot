@@ -1,0 +1,13 @@
+diff --git a/binding_generator.py b/binding_generator.py
+index e281ba4..d483c03 100644
+--- a/binding_generator.py
++++ b/binding_generator.py
+@@ -2195,7 +2195,7 @@ def generate_engine_class_source(class_api, used_classes, fully_used_classes, us
+ 
+             # Method body.
+             result.append(
+-                f'\tstatic GDExtensionMethodBindPtr _gde_method_bind = ::godot::gdextension_interface::classdb_get_method_bind({class_name}::get_class_static()._native_ptr(), StringName("{method["name"]}")._native_ptr(), {method["hash"]});'
++                f'\tGDExtensionMethodBindPtr _gde_method_bind = ::godot::gdextension_interface::classdb_get_method_bind({class_name}::get_class_static()._native_ptr(), StringName("{method["name"]}")._native_ptr(), {method["hash"]});'
+             )
+             method_call = "\t"
+             has_return = "return_value" in method and method["return_value"]["type"] != "void"

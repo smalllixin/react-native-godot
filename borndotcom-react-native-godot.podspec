@@ -31,8 +31,13 @@ Pod::Spec.new do |s|
     cs.source_files = ["common/**/*.{h,hpp,c,cpp,inc}"]
   end
 
-  s.source_files    = ["ios/**/*.{h,hpp,cpp,m,mm,swift}"]
+  # Keep versioned frameworks available for rollback without treating their
+  # headers as bridge source. exclude_files also excludes vendored frameworks.
+  s.source_files    = Dir.glob(File.join(__dir__, "ios/**/*.{h,hpp,cpp,m,mm,swift}"))
+                         .reject { |file| file.start_with?(File.join(__dir__, "ios/libs/")) }
+                         .map { |file| file.delete_prefix(__dir__ + "/") }
   s.header_mappings_dir = 'ios'
 
   install_modules_dependencies(s)
+  s.dependency 'RNWorklets'
 end

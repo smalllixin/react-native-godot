@@ -37,6 +37,7 @@
 
 #include <android/choreographer.h>
 #include <android/looper.h>
+#include <fstream>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <dlfcn.h>
@@ -62,6 +63,8 @@ class AndroidThread {
 	bool quit = false;
 
 public:
+    std::function<bool()> tick;
+    bool isCurrent() const { return thread.get_id() == std::this_thread::get_id(); }
 	AndroidThread() :
 			thread(&AndroidThread::run, this) {
 		std::unique_lock<std::mutex> lock(mutex);
@@ -151,15 +154,22 @@ public:
 			started.notify_all();
 		}
 
-		while (!quit) {
-			int outFd;
-			int outEvents;
-			void *outData;
-			int res = ALooper_pollOnce(10, &outFd, &outEvents, &outData);
-			if (res == ALOOPER_POLL_ERROR) {
-				LOGE("ALooper_pollOnce internal error.");
-			}
-		}
+        bool rendered = false;
+        while (!quit) {
+            int outFd;
+            int outEvents;
+            void *outData;
+            // Godot owns active frame pacing. Block only when paused/stopped;
+            // queued commands wake the looper even when no frame is rendered.
+            int result = ALooper_pollOnce(rendered ? 0 : -1, &outFd, &outEvents, &outData);
+            // Drain a bounded batch so touch traffic cannot accumulate one task
+            // per frame, while still giving rendering a chance under heavy input.
+            for (int pending = 0; result == ALOOPER_POLL_CALLBACK && pending < 63 && !quit; ++pending) {
+                result = ALooper_pollOnce(0, &outFd, &outEvents, &outData);
+            }
+            if (result == ALOOPER_POLL_ERROR) LOGE("ALooper_pollOnce internal error.");
+            rendered = !quit && tick && tick();
+        }
 
 		ALooper_release(looper);
 		LOGI("AndroidThread Looper thread exited.");
@@ -231,20 +241,6 @@ GDExtensionBool GDE_EXPORT gdextension_default_init(GDExtensionInterfaceGetProcA
 }
 }
 
-static void frameCallback64(int64_t frameTimeNanos, void *data) {
-	GodotModule *self = (GodotModule *)data;
-	if (!self->is_paused()) {
-		godot::GodotInstance *instance = self->get_instance();
-		if (!instance) {
-			return;
-		} else if (instance->is_started()) {
-			instance->iteration();
-		}
-		AChoreographer *choreographer = AChoreographer_getInstance();
-		AChoreographer_postFrameCallback64(choreographer, frameCallback64, data);
-	}
-}
-
 godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::string> args) {
 	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
 
@@ -258,7 +254,24 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 		}
 	}
 
-	void *handle = nullptr;
+	_generation.fetch_add(1); _sessionState = 1;
+    // Main::setup's early failure cleanup is not reentrant after a prior session.
+    // Reject unusable standalone packs before allocating any engine state.
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (args[i] != "--main-pack") continue;
+        char magic[4] = {};
+        if (i + 1 < args.size()) {
+            std::ifstream pack(args[i + 1], std::ios::binary);
+            pack.read(magic, sizeof(magic));
+        }
+        if (std::string(magic, sizeof(magic)) != "GDPC") {
+            LOGE("Cannot initialize world: main pack is missing, unreadable, or has an invalid PCK header.");
+            _sessionState = 5;
+            return nullptr;
+        }
+        break;
+    }
+	void *handle = data->handle;
 	if (!data->func_libgodot_create_godot_instance_android) {
 		libgodot_create_godot_instance_android_type func_libgodot_create_godot_instance_android = nullptr;
 #ifndef LIBGODOT_STATIC
@@ -266,6 +279,7 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 
 		if (handle == nullptr) {
 			LOGI("Unable to open libgodot_android.so: %s", dlerror());
+            _sessionState = 5;
 			return nullptr;
 		}
 		func_libgodot_create_godot_instance_android = (libgodot_create_godot_instance_android_type)dlsym(handle, "libgodot_create_godot_instance_android");
@@ -274,6 +288,7 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 			LOGE("Unable to load libgodot_create_godot_instance symbol: %s", dlerror());
 			dlclose(handle);
 			handle = nullptr;
+            _sessionState = 5;
 			return nullptr;
 		}
 #else
@@ -282,6 +297,7 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 		{
 			std::lock_guard lock(_mutex);
 			data->func_libgodot_create_godot_instance_android = func_libgodot_create_godot_instance_android;
+            data->handle = handle;
 		}
 	}
 
@@ -313,16 +329,9 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 	}
 
 	if (instance_ptr == nullptr) {
+        _sessionState = 5;
 		// Unable to start Godot
 		LOGI("Unable to start Godot");
-		if (handle) {
-			dlclose(handle);
-			handle = nullptr;
-			{
-				std::lock_guard lock(_mutex);
-				data->func_libgodot_create_godot_instance_android = nullptr;
-			}
-		}
 		return nullptr;
 	}
 
@@ -346,10 +355,17 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 
 	godot::DisplayServerEmbedded::set_native_surface(nativeSurface);
 
-	if (instance->start()) {
-		AChoreographer *choreographer = AChoreographer_getInstance();
-		AChoreographer_postFrameCallback64(choreographer, frameCallback64, this);
-	}
+    if (!instance->start()) {
+        auto destroy = reinterpret_cast<libgodot_destroy_godot_instance_type>(dlsym(handle, "libgodot_destroy_godot_instance"));
+        godot::DisplayServerEmbedded::set_native_surface({}); nativeSurface.unref(); androidSurface.unref();
+        if (destroy) destroy(instance_ptr);
+        #if GODOT_VERSION_MINOR < 7
+        godot::GDExtensionBinding::deinit();
+#else
+        godot::GDExtensionBinding::api_initialized = false;
+#endif
+        _sessionState = 5; return nullptr;
+    }
 
 	{
 		std::lock_guard lock(_mutex);
@@ -362,6 +378,8 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 		_instance = instance;
 	}
 
+	_sessionState = data->paused || data->in_background ? 3 : 2;
+    data->thread.tick = [this]() { if (is_paused()) return false; iterate(); return true; };
 	updateWindows(true);
 
 	return instance;
@@ -389,6 +407,7 @@ void GodotModule::destroy_instance() {
 		return;
 	}
 
+	_sessionState = 4; _generation.fetch_add(1); data->thread.tick = nullptr;
 	if (!data->func_libgodot_destroy_godot_instance) {
 		libgodot_destroy_godot_instance_type func_libgodot_destroy_godot_instance = nullptr;
 #ifndef LIBGODOT_STATIC
@@ -424,18 +443,21 @@ void GodotModule::destroy_instance() {
 		std::lock_guard lock(_mutex);
 
 		godot::DisplayServerEmbedded::set_native_surface(godot::Ref<godot::RenderingNativeSurface>(nullptr));
-		ANativeWindow_release(data->mainNativeWindow);
+		// The JNI surface map owns the native-window reference.
 		data->mainNativeWindow = nullptr;
 		data->mainSurface = godot::Ref<godot::RenderingNativeSurface>(nullptr);
 
 		data->func_libgodot_destroy_godot_instance(_instance->_owner);
 		_instance = nullptr;
-		godot::GDExtensionBinding::deinit();
+		#if GODOT_VERSION_MINOR < 7
+        godot::GDExtensionBinding::deinit();
+#else
+        godot::GDExtensionBinding::api_initialized = false;
+#endif
 
-		dlclose(data->handle);
-		data->handle = nullptr;
+		// Keep the engine library loaded; Java services also reference its JNI symbols.
 
-		data->paused = false;
+		_sessionState = 0;
 	}
 }
 
@@ -444,89 +466,42 @@ godot::Ref<godot::RenderingNativeSurface> GodotModule::get_main_rendering_surfac
 	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
 	return data->mainSurface;
 }
-void GodotModule::focus_out() {
-	std::lock_guard lock(_mutex);
-	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-	data->in_background = true;
-	data->thread.enqueue([this]() {
-		std::lock_guard lock(_mutex);
-		if (_instance) {
-			_instance->focus_out();
-		}
-	});
-	updateState();
-}
-
-void GodotModule::focus_in() {
-	std::lock_guard lock(_mutex);
-	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-	data->in_background = false;
-	data->thread.enqueue([this]() {
-		std::lock_guard lock(_mutex);
-		if (_instance) {
-			_instance->focus_in();
-		}
-	});
-	updateState();
-}
-
+void GodotModule::focus_out() { appPause(); }
+void GodotModule::focus_in() { appResume(); }
 bool GodotModule::is_paused() {
-	std::lock_guard lock(_mutex);
-	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-	return data->paused;
+    std::lock_guard lock(_mutex);
+    auto *data = static_cast<AndroidPlatformData *>(_data);
+    return data->paused || data->in_background;
 }
-
 void GodotModule::appPause() {
-	std::lock_guard lock(_mutex);
-	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-	data->in_background = true;
-	data->thread.enqueue([this]() {
-		std::lock_guard lock(_mutex);
-		if (_instance) {
-			_instance->pause();
-		}
-	});
-	updateState();
+    runOnGodotThread([this]() {
+        auto *data = static_cast<AndroidPlatformData *>(_data);
+        { std::lock_guard lock(_mutex); data->in_background = true; }
+        if (_instance) { _instance->focus_out(); _sessionState = 3; }
+    });
 }
-
 void GodotModule::appResume() {
-	std::lock_guard lock(_mutex);
-	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-	data->thread.enqueue([this]() {
-		std::lock_guard lock(_mutex);
-		if (_instance) {
-			_instance->resume();
-		}
-	});
-	updateState();
+    runOnGodotThread([this]() {
+        auto *data = static_cast<AndroidPlatformData *>(_data);
+        { std::lock_guard lock(_mutex); data->in_background = false; }
+        if (_instance) { _instance->focus_in(); updateState(); }
+    });
 }
-
 void GodotModule::pause() {
-	std::lock_guard lock(_mutex);
-	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-	data->paused = true;
-	updateState();
+    runOnGodotThread([this]() {
+        auto *data = static_cast<AndroidPlatformData *>(_data);
+        { std::lock_guard lock(_mutex); data->paused = true; }
+        updateState();
+    });
 }
-
 void GodotModule::resume() {
-	std::lock_guard lock(_mutex);
-	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-	data->paused = false;
-	updateState();
+    runOnGodotThread([this]() {
+        auto *data = static_cast<AndroidPlatformData *>(_data);
+        { std::lock_guard lock(_mutex); data->paused = false; }
+        updateState();
+    });
 }
-
-void GodotModule::updateState() {
-	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-	if (data->in_background || data->paused) {
-		// Nothing to do, frameCallback will not do anything if it is paused
-	} else {
-		// Register the frame callback again
-		data->thread.enqueue([this]() {
-			AChoreographer *choreographer = AChoreographer_getInstance();
-			AChoreographer_postFrameCallback64(choreographer, frameCallback64, this);
-		});
-	}
-}
+void GodotModule::updateState() { if (_instance) _sessionState = is_paused() ? 3 : 2; }
 
 class CPPCallable : public godot::CallableCustom {
 	//    friend bool javascript_callable_compare_equal_func(const godot::CallableCustom *p_a, const godot::CallableCustom *p_b) {
@@ -575,7 +550,7 @@ godot::Callable GodotModule::create_callable(std::function<void(const godot::Var
 void GodotModule::registerWindowUpdateCallback(std::string name, void *handle, std::function<void(bool)> f, void *ref) {
 	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
 	std::lock_guard lock(data->windowUpdateMutex);
-	LOGD("Registering Window: %llx, %s", (uint64_t)handle, name.c_str());
+	LOGD("Registering Window: %p, %s", handle, name.c_str());
 	if (data->handleToWindowName.contains(handle)) {
 		std::string currentName = data->handleToWindowName[handle];
 		if (currentName != name) {
@@ -593,7 +568,7 @@ void GodotModule::unregisterWindowUpdateCallback(void *handle) {
 	std::lock_guard lock(data->windowUpdateMutex);
 	if (data->handleToWindowName.contains(handle)) {
 		std::string name = data->handleToWindowName[handle];
-		LOGD("Unregistering Window: %llx, %s", (uint64_t)handle, name.c_str());
+		LOGD("Unregistering Window: %p, %s", handle, name.c_str());
 		WindowFuncData fd = data->windowUpdateCallbacks[name];
 		JNIEnv *env = LibGodot::get_jni_env();
 		env->DeleteGlobalRef(fd.ref);
@@ -631,25 +606,16 @@ void GodotModule::updateWindows(bool adding) {
 }
 
 void GodotModule::runOnGodotThread(std::function<void()> f, bool wait) {
-	if (wait) {
-		std::mutex waitMutex;
-		std::condition_variable waitVar;
-		bool ready = false;
-		std::function<void()> runFunc = [&f, &waitMutex, &waitVar, &ready]() {
-			f();
-			std::unique_lock<std::mutex> lock(waitMutex);
-			ready = true;
-			lock.unlock();
-			waitVar.notify_one();
-		};
-		std::unique_lock<std::mutex> lock(waitMutex);
-		AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-		data->thread.enqueue(runFunc);
-		waitVar.wait(lock, [&ready] { return ready; });
-	} else {
-		AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
-		data->thread.enqueue(f);
-	}
+    auto *data = static_cast<AndroidPlatformData *>(_data);
+    if (data->thread.isCurrent()) { f(); return; }
+    if (!wait) { data->thread.enqueue(std::move(f)); return; }
+    auto completed = std::make_shared<std::promise<void>>();
+    auto future = completed->get_future();
+    data->thread.enqueue([f = std::move(f), completed]() {
+        try { f(); completed->set_value(); }
+        catch (...) { completed->set_exception(std::current_exception()); }
+    });
+    future.get();
 }
 
 void GodotModule::iterate() {

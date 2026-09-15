@@ -1,0 +1,29 @@
+name: Build embedding candidate
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        type: choice
+        options: [Debug, Release]
+        default: Debug
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned Apple tools
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun --find metal
+      - run: python3 engine/build.py --jobs 2 --configuration "${{ inputs.configuration }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unqualified-ios-${{ inputs.configuration }}
+          path: ~/Library/Caches/hog-godot/candidate/artifacts/

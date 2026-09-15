@@ -23,7 +23,13 @@ def prebuilt_path(lib_name)
     raise "Unable to locate package.json at #{package_path}"
   end
 
-  package = JSON.parse(File.read(package_path))
+  override = File.join(__dir__, ".godot-toolchain.json")
+  profile_path = ENV["GODOT_TOOLCHAIN_PROFILE"]
+  if profile_path && !profile_path.empty?
+    package = { "prebuiltFiles" => JSON.parse(File.read(profile_path))["nativeArtifacts"] }
+  else
+    package = JSON.parse(File.read(File.file?(override) ? override : package_path))
+  end
 
   entry = package["prebuiltFiles"]&.find { |e| e["name"] == lib_name }
 

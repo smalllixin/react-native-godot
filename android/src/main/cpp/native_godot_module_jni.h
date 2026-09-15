@@ -26,7 +26,6 @@
 #include <ReactCommon/CallInvokerHolder.h>
 #include <fbjni/fbjni.h>
 #include <jsi/jsi.h>
-#include <react/jni/CxxModuleWrapper.h>
 
 using namespace facebook;
 
@@ -50,6 +49,9 @@ private:
 	jsi::Runtime *rnRuntime_;
 	std::shared_ptr<facebook::react::CallInvoker> callInvoker_;
 	bool installTurboModule();
+    std::function<void()> invalidateRuntime;
+    void invalidateRuntimeNative();
+    void setAppActive(bool active);
 
 	explicit NativeGodotModuleJNI(
 			jni::alias_ref<NativeGodotModuleJNI::jhybridobject> jThis,

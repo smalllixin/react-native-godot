@@ -1,0 +1,2680 @@
+diff --git a/core/io/file_access_zip.cpp b/core/io/file_access_zip.cpp
+index 2bb9db7..62ad9a9 100644
+--- a/core/io/file_access_zip.cpp
++++ b/core/io/file_access_zip.cpp
+@@ -227,6 +227,7 @@ ZipArchive::ZipArchive() {
+ 
+ ZipArchive::~ZipArchive() {
+ 	packages.clear();
++	instance = nullptr;
+ }
+ 
+ Error FileAccessZip::open_internal(const String &p_path, int p_mode_flags) {
+diff --git a/core/io/ip.cpp b/core/io/ip.cpp
+index ec7c72d..439d05a 100644
+--- a/core/io/ip.cpp
++++ b/core/io/ip.cpp
+@@ -351,4 +351,5 @@ IP::~IP() {
+ 	resolver->thread.wait_to_finish();
+ 
+ 	memdelete(resolver);
++	if (singleton == this) singleton = nullptr;
+ }
+diff --git a/core/io/resource_uid.cpp b/core/io/resource_uid.cpp
+index 5e9fff6..a7f3947 100644
+--- a/core/io/resource_uid.cpp
++++ b/core/io/resource_uid.cpp
+@@ -441,4 +441,5 @@ ResourceUID::~ResourceUID() {
+ 	if (crypto != nullptr) {
+ 		memdelete((CryptoCore::RandomGenerator *)crypto);
+ 	}
++	if (singleton == this) singleton = nullptr;
+ }
+diff --git a/core/object/gdtype.h b/core/object/gdtype.h
+index 2080142..299d405 100644
+--- a/core/object/gdtype.h
++++ b/core/object/gdtype.h
+@@ -52,6 +52,7 @@ public:
+ protected:
+ 	const GDType *super_type;
+ 	mutable InitState init_state = InitState::UNINITIALIZED;
++	bool class_initialized = false;
+ 
+ 	StringName name;
+ 	/// Contains all the class names in order:
+@@ -73,6 +74,8 @@ public:
+ 
+ 	InitState get_init_state() const { return init_state; }
+ 	void initialize();
++	bool is_class_initialized() const { return class_initialized; }
++	void mark_class_initialized() { class_initialized = true; }
+ 
+ 	const GDType *get_super_type() const { return super_type; }
+ 	const StringName &get_name() const { return name; }
+diff --git a/core/object/object.cpp b/core/object/object.cpp
+index c6f0cf2..9a98071 100644
+--- a/core/object/object.cpp
++++ b/core/object/object.cpp
+@@ -1700,14 +1700,13 @@ Variant Object::_get_indexed_bind(const NodePath &p_name) const {
+ }
+ 
+ void Object::initialize_class() {
+-	static bool initialized = false;
+-	if (likely(initialized)) {
++	if (likely(get_gdtype_static_mutable().is_class_initialized())) {
+ 		return;
+ 	}
+ 
+ 	static BinaryMutex __init_mutex;
+ 	MutexLock lock(__init_mutex);
+-	if (initialized) {
++	if (get_gdtype_static_mutable().is_class_initialized()) {
+ 		// Initialized on another thread while we were waiting.
+ 		return;
+ 	}
+@@ -1715,7 +1714,7 @@ void Object::initialize_class() {
+ 	get_gdtype_static_mutable().initialize();
+ 	_bind_methods();
+ 	_bind_compatibility_methods();
+-	initialized = true;
++	get_gdtype_static_mutable().mark_class_initialized();
+ }
+ 
+ StringName Object::get_translation_domain() const {
+@@ -2570,7 +2569,11 @@ void ObjectDB::cleanup() {
+ 
+ 	if (object_slots) {
+ 		memfree(object_slots);
++		object_slots = nullptr;
+ 	}
+ 
++	slot_count = 0;
++	slot_max = 0;
++	// Preserve validator_counter so an old ObjectID cannot name a new object.
+ 	spin_lock.unlock();
+ }
+diff --git a/core/object/object.h b/core/object/object.h
+index 451680a..f1180a5 100644
+--- a/core/object/object.h
++++ b/core/object/object.h
+@@ -253,19 +253,17 @@ private: \
+ \
+ 	static GDType &get_gdtype_static_mutable() { \
+ 		static GDType *gdtype = nullptr; \
+-		static bool initialized = false; \
+-		if (likely(initialized)) { \
++		if (likely(gdtype != nullptr)) { \
+ 			return *gdtype; \
+ 		} \
+ \
+ 		static BinaryMutex __init_mutex; \
+ 		MutexLock lock(__init_mutex); \
+-		if (initialized) { \
++		if (gdtype != nullptr) { \
+ 			return *gdtype; \
+ 		} \
+ 		gdtype = memnew(GDType(&super_type::get_gdtype_static(), StringName(#m_class))); \
+ 		m_class::autorelease_gdtype(&gdtype); \
+-		initialized = true; \
+ 		return *gdtype; \
+ 	} \
+ \
+@@ -290,14 +288,13 @@ protected: \
+ \
+ public: \
+ 	static void initialize_class() { \
+-		static bool initialized = false; \
+-		if (likely(initialized)) { \
++		if (likely(get_gdtype_static_mutable().is_class_initialized())) { \
+ 			return; \
+ 		} \
+ \
+ 		static BinaryMutex __init_mutex; \
+ 		MutexLock lock(__init_mutex); \
+-		if (initialized) { \
++		if (get_gdtype_static_mutable().is_class_initialized()) { \
+ 			return; \
+ 		} \
+ 		m_inherits::initialize_class(); \
+@@ -309,7 +306,7 @@ public: \
+ 		if (m_class::_get_bind_compatibility_methods() != m_inherits::_get_bind_compatibility_methods()) { \
+ 			_bind_compatibility_methods(); \
+ 		} \
+-		initialized = true; \
++		get_gdtype_static_mutable().mark_class_initialized(); \
+ 	} \
+ \
+ protected: \
+@@ -454,19 +451,17 @@ private:
+ 
+ 	static GDType &get_gdtype_static_mutable() {
+ 		static GDType *gdtype = nullptr;
+-		static bool initialized = false;
+-		if (likely(initialized)) {
++		if (likely(gdtype != nullptr)) {
+ 			return *gdtype;
+ 		}
+ 
+ 		static BinaryMutex __init_mutex;
+ 		MutexLock lock(__init_mutex);
+-		if (initialized) {
++		if (gdtype != nullptr) {
+ 			return *gdtype;
+ 		}
+ 		gdtype = memnew(GDType(nullptr, StringName("Object")));
+ 		autorelease_gdtype(&gdtype);
+-		initialized = true;
+ 		return *gdtype;
+ 	}
+ 
+diff --git a/core/os/os.cpp b/core/os/os.cpp
+index ffc0dff..ee6e796 100644
+--- a/core/os/os.cpp
++++ b/core/os/os.cpp
+@@ -835,6 +835,7 @@ OS::OS() {
+ }
+ 
+ OS::~OS() {
++	target_ticks = 0;
+ 	if (_logger) {
+ 		memdelete(_logger);
+ 	}
+diff --git a/core/string/string_name.cpp b/core/string/string_name.cpp
+index 0892ad0..b6da03d 100644
+--- a/core/string/string_name.cpp
++++ b/core/string/string_name.cpp
+@@ -46,6 +46,9 @@ struct StringName::Table {
+ };
+ 
+ void StringName::setup() {
++#ifdef LIBGODOT_ENABLED
++	if (configured) return;
++#endif
+ 	ERR_FAIL_COND(configured);
+ 	for (uint32_t i = 0; i < Table::TABLE_LEN; i++) {
+ 		Table::table[i] = nullptr;
+@@ -54,6 +57,11 @@ void StringName::setup() {
+ }
+ 
+ void StringName::cleanup() {
++#ifdef LIBGODOT_ENABLED
++	// Engine and extension static StringNames outlive an embedded session.
++	// Normal unref still releases dynamic names between sessions.
++	return;
++#endif
+ 	MutexLock lock(Table::mutex);
+ 
+ #ifdef DEBUG_ENABLED
+diff --git a/drivers/apple_embedded/SCsub b/drivers/apple_embedded/SCsub
+index 59ade51..1b64146 100644
+--- a/drivers/apple_embedded/SCsub
++++ b/drivers/apple_embedded/SCsub
+@@ -12,16 +12,17 @@ env_apple_embedded = env.Clone()
+ # Enable module support
+ env_apple_embedded.Append(CCFLAGS=["-fmodules", "-fcxx-modules"])
+ 
+-# Configure Swift builder
+-apple_platform = env["APPLE_PLATFORM"]
+-sdk_path = env["APPLE_SDK_PATH"]
+-current_path = Dir(".").abspath
+-bridging_header_filename = "bridging_header_apple_embedded.h"
+-swift_files = Glob("*.swift")
+-swift_file_names = list(map(lambda f: f.name, swift_files))
+-setup_swift_builder(
+-    env_apple_embedded, apple_platform, sdk_path, current_path, bridging_header_filename, swift_file_names
+-)
++if env["library_type"] == "executable":
++    # Configure Swift builder
++    apple_platform = env["APPLE_PLATFORM"]
++    sdk_path = env["APPLE_SDK_PATH"]
++    current_path = Dir(".").abspath
++    bridging_header_filename = "bridging_header_apple_embedded.h"
++    swift_files = Glob("*.swift")
++    swift_file_names = list(map(lambda f: f.name, swift_files))
++    setup_swift_builder(
++        env_apple_embedded, apple_platform, sdk_path, current_path, bridging_header_filename, swift_file_names
++    )
+ 
+ # Use bundled Vulkan headers
+ vulkan_dir = "#thirdparty/vulkan"
+@@ -31,5 +32,8 @@ env_apple_embedded.Prepend(CPPPATH=[vulkan_dir, vulkan_dir + "/include"])
+ env_apple_embedded.Prepend(CPPPATH=["#thirdparty/metal-cpp"])
+ 
+ # Driver source files
+-env_apple_embedded.add_source_files(env_apple_embedded.drivers_sources, "*.mm")
+-env_apple_embedded.add_source_files(env_apple_embedded.drivers_sources, "*.swift")
++if env["library_type"] != "executable":
++    env_apple_embedded.add_source_files(env_apple_embedded.drivers_sources, ["apple_embedded.mm", "os_apple_embedded.mm"])
++else:
++    env_apple_embedded.add_source_files(env_apple_embedded.drivers_sources, "*.mm")
++    env_apple_embedded.add_source_files(env_apple_embedded.drivers_sources, "*.swift")
+diff --git a/drivers/apple_embedded/apple_embedded.mm b/drivers/apple_embedded/apple_embedded.mm
+index b6b5410..7e5c99a 100644
+--- a/drivers/apple_embedded/apple_embedded.mm
++++ b/drivers/apple_embedded/apple_embedded.mm
+@@ -160,6 +160,9 @@
+ }
+ 
+ void AppleEmbedded::alert(const char *p_alert, const char *p_title) {
++#ifdef LIBGODOT_ENABLED
++    NSLog(@"%s: %s", p_title, p_alert);
++#else
+ 	NSString *title = [NSString stringWithUTF8String:p_title];
+ 	NSString *message = [NSString stringWithUTF8String:p_alert];
+ 
+@@ -172,6 +175,7 @@
+ 	[alert addAction:button];
+ 
+ 	[GDTAppDelegateService.viewController presentViewController:alert animated:YES completion:nil];
++#endif
+ }
+ 
+ String AppleEmbedded::get_model() const {
+diff --git a/drivers/apple_embedded/os_apple_embedded.h b/drivers/apple_embedded/os_apple_embedded.h
+index d801a86..493ba1a 100644
+--- a/drivers/apple_embedded/os_apple_embedded.h
++++ b/drivers/apple_embedded/os_apple_embedded.h
+@@ -53,7 +53,9 @@ private:
+ 	static HashMap<String, void *> dynamic_symbol_lookup_table;
+ 	friend void register_dynamic_symbol(char *name, void *address);
+ 
++#ifdef COREAUDIO_ENABLED
+ 	AudioDriverCoreAudio audio_driver;
++#endif
+ 
+ 	AppleEmbedded *apple_embedded = nullptr;
+ 
+diff --git a/drivers/apple_embedded/os_apple_embedded.mm b/drivers/apple_embedded/os_apple_embedded.mm
+index 84e4821..0ed2d90 100644
+--- a/drivers/apple_embedded/os_apple_embedded.mm
++++ b/drivers/apple_embedded/os_apple_embedded.mm
+@@ -154,7 +154,9 @@ Rect2 fit_keep_aspect_covered(const Vector2 &p_container, const Vector2 &p_rect)
+ 	loggers.push_back(memnew(OsLogLogger(NSBundle.mainBundle.bundleIdentifier.UTF8String)));
+ 	_set_logger(memnew(CompositeLogger(loggers)));
+ 
++#ifdef COREAUDIO_ENABLED
+ 	AudioDriverManager::add_driver(&audio_driver);
++#endif
+ }
+ 
+ OS_AppleEmbedded::~OS_AppleEmbedded() {}
+@@ -219,11 +221,14 @@ Rect2 fit_keep_aspect_covered(const Vector2 &p_container, const Vector2 &p_rect)
+ }
+ 
+ bool OS_AppleEmbedded::iterate() {
++
++
++
+ 	if (!main_loop) {
+ 		return true;
+ 	}
+ 
+-	GodotProfileFrameMark;
++
+ 	GodotProfileZone("OS_AppleEmbedded::iterate");
+ 
+ 	if (DisplayServer::get_singleton()) {
+@@ -775,15 +780,19 @@ Rect2 fit_keep_aspect_covered(const Vector2 &p_container, const Vector2 &p_rect)
+ 	if (is_focused) {
+ 		is_focused = false;
+ 
++#ifndef LIBGODOT_ENABLED
+ 		if (DisplayServerAppleEmbedded::get_singleton()) {
+ 			DisplayServerAppleEmbedded::get_singleton()->send_window_event(DisplayServerEnums::WINDOW_EVENT_FOCUS_OUT);
+ 		}
++#endif
+ 
+ 		if (OS::get_singleton()->get_main_loop()) {
+ 			OS::get_singleton()->get_main_loop()->notification(MainLoop::NOTIFICATION_APPLICATION_FOCUS_OUT);
+ 		}
+ 
++#ifndef LIBGODOT_ENABLED
+ 		[GDTAppDelegateService.viewController.godotView stopRendering];
++#endif
+ 
+ 		audio_driver.stop();
+ 	}
+@@ -793,15 +802,19 @@ Rect2 fit_keep_aspect_covered(const Vector2 &p_container, const Vector2 &p_rect)
+ 	if (!is_focused) {
+ 		is_focused = true;
+ 
++#ifndef LIBGODOT_ENABLED
+ 		if (DisplayServerAppleEmbedded::get_singleton()) {
+ 			DisplayServerAppleEmbedded::get_singleton()->send_window_event(DisplayServerEnums::WINDOW_EVENT_FOCUS_IN);
+ 		}
++#endif
+ 
+ 		if (OS::get_singleton()->get_main_loop()) {
+ 			OS::get_singleton()->get_main_loop()->notification(MainLoop::NOTIFICATION_APPLICATION_FOCUS_IN);
+ 		}
+ 
++#ifndef LIBGODOT_ENABLED
+ 		[GDTAppDelegateService.viewController.godotView startRendering];
++#endif
+ 
+ 		audio_driver.start();
+ 	}
+diff --git a/drivers/metal/metal_objects_shared.h b/drivers/metal/metal_objects_shared.h
+index e5d01d9..552f508 100644
+--- a/drivers/metal/metal_objects_shared.h
++++ b/drivers/metal/metal_objects_shared.h
+@@ -1059,7 +1059,9 @@ public:
+ 		_FORCE_INLINE_ void apply(T *p_enc) const {
+ 			p_enc->setCullMode(cull_mode);
+ 			p_enc->setTriangleFillMode(fill_mode);
++#ifndef IOS_SIMULATOR
+ 			p_enc->setDepthClipMode(clip_mode);
++#endif
+ 			p_enc->setFrontFacingWinding(winding);
+ 			depth_bias.apply(p_enc);
+ 			stencil.apply(p_enc);
+diff --git a/drivers/metal/rendering_context_driver_metal.cpp b/drivers/metal/rendering_context_driver_metal.cpp
+index 97af15a..3e3bfb4 100644
+--- a/drivers/metal/rendering_context_driver_metal.cpp
++++ b/drivers/metal/rendering_context_driver_metal.cpp
+@@ -210,9 +210,12 @@ public:
+ 		count--;
+ 		front = (front + 1) % frame_buffers.size();
+ 
++#ifndef IOS_SIMULATOR
+ 		if (vsync_mode != DisplayServerEnums::VSYNC_DISABLED) {
+ 			p_cmd_buffer->get_command_buffer()->presentDrawableAfterMinimumDuration(drawable, present_minimum_duration);
+-		} else {
++		} else
++#endif
++		{
+ 			p_cmd_buffer->get_command_buffer()->presentDrawable(drawable);
+ 		}
+ 	}
+diff --git a/drivers/metal/rendering_device_driver_metal.cpp b/drivers/metal/rendering_device_driver_metal.cpp
+index 90dae10..175c066 100644
+--- a/drivers/metal/rendering_device_driver_metal.cpp
++++ b/drivers/metal/rendering_device_driver_metal.cpp
+@@ -219,7 +219,11 @@ static const MTL::TextureType TEXTURE_TYPE[RDD::TEXTURE_TYPE_MAX] = {
+ 	MTL::TextureTypeCube,
+ 	MTL::TextureType1DArray,
+ 	MTL::TextureType2DArray,
++#ifdef IOS_SIMULATOR
++	MTL::TextureType2DArray,
++#else
+ 	MTL::TextureTypeCubeArray,
++#endif
+ };
+ 
+ bool RenderingDeviceDriverMetal::is_valid_linear(TextureFormat const &p_format) const {
+@@ -249,7 +253,11 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p
+ 			p_format.texture_type == TEXTURE_TYPE_2D_ARRAY) {
+ 		desc->setArrayLength(p_format.array_layers);
+ 	} else if (p_format.texture_type == TEXTURE_TYPE_CUBE_ARRAY) {
+-		desc->setArrayLength(p_format.array_layers / 6);
++#ifdef IOS_SIMULATOR
++        desc->setArrayLength(p_format.array_layers);
++#else
++        desc->setArrayLength(p_format.array_layers / 6);
++#endif
+ 	}
+ 
+ 	// TODO(sgc): Evaluate lossy texture support (perhaps as a project option?)
+@@ -2892,6 +2900,7 @@ Error RenderingDeviceDriverMetal::_initialize(uint32_t p_device_index, uint32_t
+ 		print_verbose("- Metal multiview not supported");
+ 	}
+ 
++#ifndef IOS_SIMULATOR
+ 	// The Metal renderer requires Apple4 family. This is 2017 era A11 chips and newer.
+ 	if (device_properties->features.highestFamily < MTL::GPUFamilyApple4) {
+ 		String error_string = vformat("Your Apple GPU does not support the following features, which are required to use Metal-based renderers in Godot:\n\n");
+@@ -2908,6 +2917,7 @@ Error RenderingDeviceDriverMetal::_initialize(uint32_t p_device_index, uint32_t
+ 
+ 		return ERR_CANT_CREATE;
+ 	}
++#endif
+ 
+ 	return OK;
+ }
+diff --git a/drivers/metal/rendering_shader_container_metal.cpp b/drivers/metal/rendering_shader_container_metal.cpp
+index ac0bdc4..d65b0c9 100644
+--- a/drivers/metal/rendering_shader_container_metal.cpp
++++ b/drivers/metal/rendering_shader_container_metal.cpp
+@@ -358,6 +358,11 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
+ 	mtl_reflection_data.profile = *device_profile;
+ 
+ 	CompilerMSL::Options msl_options{};
++#ifdef IOS_SIMULATOR
++    // Simulator lacks texturecube_array. SPIRV-Cross preserves GLSL sampling
++    // semantics while using the 2D-array storage selected by the Metal driver.
++    msl_options.emulate_cube_array = true;
++#endif
+ 
+ 	// Determine Metal language version.
+ 	uint32_t msl_version = 0;
+@@ -601,7 +606,7 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
+ 						} break;
+ 						case SpvDimCube: {
+ 							if (image.arrayed) {
+-								found->texture_type = MTL::TextureTypeCubeArray;
++								found->texture_type = msl_options.emulate_cube_array ? MTL::TextureType2DArray : MTL::TextureTypeCubeArray;
+ 							} else {
+ 								found->texture_type = MTL::TextureTypeCube;
+ 							}
+diff --git a/drivers/register_driver_types.cpp b/drivers/register_driver_types.cpp
+index 9d8a87f..8ff626d 100644
+--- a/drivers/register_driver_types.cpp
++++ b/drivers/register_driver_types.cpp
+@@ -29,6 +29,9 @@
+ /**************************************************************************/
+ 
+ #include "register_driver_types.h"
++#if defined(IOS_ENABLED) || defined(MACOS_ENABLED)
++#include "drivers/apple/rendering_native_surface_apple.h"
++#endif
+ 
+ #include "core/io/resource_saver.h"
+ #include "drivers/png/image_loader_png.h"
+@@ -42,6 +45,9 @@ static Ref<ImageLoaderPNG> image_loader_png;
+ static Ref<ResourceSaverPNG> resource_saver_png;
+ 
+ void register_core_driver_types() {
++#if defined(IOS_ENABLED) || defined(MACOS_ENABLED)
++	GDREGISTER_CLASS(RenderingNativeSurfaceApple);
++#endif
+ #ifdef ACCESSKIT_ENABLED
+ 	AccessibilityServerAccessKit::register_create_func();
+ #endif
+@@ -62,6 +68,7 @@ void unregister_core_driver_types() {
+ }
+ 
+ void register_driver_types() {
++
+ }
+ 
+ void unregister_driver_types() {
+diff --git a/main/main.cpp b/main/main.cpp
+index 2fc62fd..41a1085 100644
+--- a/main/main.cpp
++++ b/main/main.cpp
+@@ -755,6 +755,7 @@ Error Main::test_setup() {
+ 	engine = memnew(Engine);
+ 
+ 	register_core_types();
++	register_core_server_types();
+ 	register_core_driver_types();
+ 
+ 	packed_data = memnew(PackedData);
+@@ -1065,6 +1066,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
+ 	MAIN_PRINT("Main: Initialize CORE");
+ 
+ 	register_core_types();
++	register_core_server_types();
+ 	register_core_driver_types();
+ 
+ 	MAIN_PRINT("Main: Initialize Globals");
+@@ -4042,7 +4044,12 @@ int Main::start() {
+ #endif // DISABLE_DEPRECATED
+ #endif // TOOLS_ENABLED
+ 
+-	main_timer_sync.init(OS::get_singleton()->get_ticks_usec());
++	// Each LibGodot session starts its own clock and physics accumulator.
++	main_timer_sync = MainTimerSync();
++	last_ticks = OS::get_singleton()->get_ticks_usec();
++	frames = 0;
++	frame = 0;
++	main_timer_sync.init(last_ticks);
+ 	List<String> args = OS::get_singleton()->get_cmdline_args();
+ 
+ 	for (List<String>::Element *E = args.front(); E; E = E->next()) {
+diff --git a/platform/ios/SCsub b/platform/ios/SCsub
+index 92f6c17..6afb16a 100644
+--- a/platform/ios/SCsub
++++ b/platform/ios/SCsub
+@@ -7,17 +7,29 @@ from platform_methods import combine_libs_apple_embedded
+ 
+ Import("env")
+ 
+-ios_lib = [
++
++common_ios_lib_files = [
++    "os_ios.mm",
++]
++
++ios_lib_files = [
+     "device_metrics.mm",
+     "display_layer_ios.mm",
+     "display_server_ios.mm",
+     "godot_view_ios.mm",
+     "main_ios.mm",
+-    "os_ios.mm",
++]
++
++ios_libgodot_files = [
++    "libgodot_ios.mm",
+ ]
+ 
+ env_ios = env.Clone()
+-ios_lib = env_ios.add_library("ios", ios_lib)
++
++if env["library_type"] != "executable":
++    ios_lib = env_ios.add_library("ios", common_ios_lib_files + ios_libgodot_files)
++else:
++    ios_lib = env_ios.add_library("ios", common_ios_lib_files + ios_lib_files)
+ 
+ # (iOS) Enable module support
+ env_ios.Append(CCFLAGS=["-fmodules", "-fcxx-modules"])
+diff --git a/platform/ios/api/api.cpp b/platform/ios/api/api.cpp
+index 9de3961..ada85d0 100644
+--- a/platform/ios/api/api.cpp
++++ b/platform/ios/api/api.cpp
+@@ -30,7 +30,7 @@
+ 
+ #include "api.h"
+ 
+-#if defined(IOS_ENABLED)
++#if defined(IOS_ENABLED) && !defined(LIBGODOT_ENABLED)
+ 
+ void register_ios_api() {
+ 	godot_apple_embedded_plugins_initialize();
+diff --git a/platform/ios/detect.py b/platform/ios/detect.py
+index b7da135..a9ccb1e 100644
+--- a/platform/ios/detect.py
++++ b/platform/ios/detect.py
+@@ -32,6 +32,8 @@ def get_opts():
+         (("apple_target_triple", "ios_triple"), "Triple for the corresponding target Apple platform toolchain", ""),
+         BoolVariable(("simulator", "ios_simulator"), "Build for Simulator", False),
+         BoolVariable("generate_bundle", "Generate an APP bundle after building iOS/macOS binaries", False),
++        ("angle_libs", "Path to the ANGLE static libraries", ""),
++        BoolVariable("coreaudio_enabled", "Coreaudio Enabled", True),
+     ]
+ 
+ 
+@@ -51,7 +53,7 @@ def get_flags():
+         "target": "template_debug",
+         "use_volk": False,
+         "metal": True,
+-        "supported": ["metal", "mono"],
++        "supported": ["metal", "mono", "library"],
+         "builtin_pcre2_with_jit": False,
+     }
+ 
+@@ -151,11 +153,14 @@ def configure(env: "SConsEnvironment"):
+     )
+ 
+     env.Prepend(CPPPATH=["#platform/ios"])
+-    env.Append(CPPDEFINES=["IOS_ENABLED", "APPLE_EMBEDDED_ENABLED", "UNIX_ENABLED", "COREAUDIO_ENABLED"])
++    env.Append(CPPDEFINES=["IOS_ENABLED", "UNIX_ENABLED", "APPLE_EMBEDDED_ENABLED"])
+ 
+-    if env["metal"] and env["simulator"]:
+-        print_warning("iOS Simulator does not support the Metal rendering driver")
+-        env["metal"] = False
++    if env["coreaudio_enabled"]:
++        env.Append(CPPDEFINES=["COREAUDIO_ENABLED"])
++
++    #if env["metal"] and env["ios_simulator"]:
++    #    print_warning("iOS simulator does not support the Metal rendering driver")
++    #    env["metal"] = False
+ 
+     if env["metal"]:
+         env.AppendUnique(CPPDEFINES=["METAL_ENABLED", "RD_ENABLED"])
+diff --git a/platform/ios/os_ios.h b/platform/ios/os_ios.h
+index 89eeab1..712e0ba 100644
+--- a/platform/ios/os_ios.h
++++ b/platform/ios/os_ios.h
+@@ -42,6 +42,7 @@ public:
+ 	~OS_IOS();
+ 
+ 	virtual String get_name() const override;
++	virtual String get_processor_name() const override;
+ };
+ 
+ #endif // IOS_ENABLED
+diff --git a/platform/ios/os_ios.mm b/platform/ios/os_ios.mm
+index 6aa35c5..77aa51c 100644
+--- a/platform/ios/os_ios.mm
++++ b/platform/ios/os_ios.mm
+@@ -31,6 +31,11 @@
+ #import "os_ios.h"
+ 
+ #import "display_server_ios.h"
++#include "servers/display_server_embedded.h"
++
++#include <sys/types.h>
++#include <sys/sysctl.h>
++#include <mach/machine.h>
+ 
+ #ifdef IOS_ENABLED
+ 
+@@ -40,13 +45,57 @@
+ 
+ OS_IOS::OS_IOS() :
+ 		OS_AppleEmbedded() {
++#ifndef LIBGODOT_ENABLED
+ 	DisplayServerIOS::register_ios_driver();
++#endif
++	DisplayServerEmbedded::register_embedded_driver();
+ }
+ 
+-OS_IOS::~OS_IOS() {}
++OS_IOS::~OS_IOS() {
++
++}
+ 
+ String OS_IOS::get_name() const {
+ 	return "iOS";
+ }
+ 
++String OS_IOS::get_processor_name() const {
++	NSMutableString *ns_cpu = [[NSMutableString alloc] init];
++    size_t size;
++	cpu_type_t type;
++	cpu_subtype_t subtype;
++	size = sizeof(type);
++	sysctlbyname("hw.cputype", &type, &size, NULL, 0);
++
++	size = sizeof(subtype);
++	sysctlbyname("hw.cpusubtype", &subtype, &size, NULL, 0);
++
++	// values for cputype and cpusubtype defined in mach/machine.h
++	if (type == CPU_TYPE_X86_64) {
++		[ns_cpu appendString:@"x86_64"];
++	} else if (type == CPU_TYPE_X86) {
++		[ns_cpu appendString:@"x86"];
++	} else if (type == CPU_TYPE_ARM) {
++		[ns_cpu appendString:@"ARM"];
++		switch(subtype)
++		{
++			case CPU_SUBTYPE_ARM_V6:
++				[ns_cpu appendString:@"V6"];
++				break;
++			case CPU_SUBTYPE_ARM_V7:
++				[ns_cpu appendString:@"V7"];
++				break;
++			case CPU_SUBTYPE_ARM_V8:
++				[ns_cpu appendString:@"V8"];
++				break;
++		}
++	} else if (type == CPU_TYPE_ARM64) {
++		[ns_cpu appendString:@"ARM64"];
++	}
++	if ([ns_cpu length] != 0) {
++		return String::utf8([ns_cpu UTF8String]);
++	}
++	ERR_FAIL_V_MSG("", String("Couldn't get the CPU model name. Returning an empty string."));
++}
++
+ #endif // IOS_ENABLED
+diff --git a/scene/main/window.cpp b/scene/main/window.cpp
+index bc56ddb..038514f 100644
+--- a/scene/main/window.cpp
++++ b/scene/main/window.cpp
+@@ -1005,6 +1005,10 @@ void Window::_accessibility_notify_exit(Node *p_node) {
+ 
+ void Window::set_visible(bool p_visible) {
+ 	ERR_MAIN_THREAD_GUARD;
++	if (native_surface.is_valid()) {
++		p_visible = true;
++	}
++
+ 	if (visible == p_visible) {
+ 		return;
+ 	}
+@@ -1109,6 +1113,37 @@ void Window::_clear_transient() {
+ 	}
+ }
+ 
++void Window::set_native_surface(Ref<RenderingNativeSurface> p_native_surface) {
++	Ref<RenderingNativeSurface> new_native_handle = p_native_surface;
++	if (new_native_handle == native_surface) {
++		return;
++	}
++	if (new_native_handle.is_valid()) {
++        // If it is a valid surface, then make us visible
++        set_visible(true);
++    }
++	if (!initialized) {
++		native_surface = new_native_handle;
++		return;
++	}
++	if (embedder) {
++		embedder->_sub_window_remove(this);
++	} else {
++		_clear_window();
++	}
++	native_surface = new_native_handle;
++	embedder = get_embedder();
++	if (embedder) {
++		embedder->_sub_window_register(this);
++	} else {
++		_make_window();
++	}
++}
++
++Ref<RenderingNativeSurface> Window::get_native_surface() {
++	return native_surface;
++}
++
+ void Window::_make_transient() {
+ 	if (!get_parent()) {
+ 		//main window, can't be transient
+@@ -1480,6 +1515,10 @@ Viewport *Window::get_embedder() const {
+ 		return nullptr;
+ 	}
+ 
++	if (native_surface != nullptr) {
++		return nullptr;
++	}
++
+ 	Viewport *vp = get_parent_viewport();
+ 
+ 	while (vp) {
+@@ -3410,6 +3449,9 @@ void Window::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("set_visible", "visible"), &Window::set_visible);
+ 	ClassDB::bind_method(D_METHOD("is_visible"), &Window::is_visible);
+ 
++	ClassDB::bind_method(D_METHOD("set_native_surface", "native_surface"), &Window::set_native_surface);
++	ClassDB::bind_method(D_METHOD("get_native_surface"), &Window::get_native_surface);
++
+ 	ClassDB::bind_method(D_METHOD("hide"), &Window::hide);
+ 	ClassDB::bind_method(D_METHOD("show"), &Window::show);
+ 
+diff --git a/scene/main/window.h b/scene/main/window.h
+index 9c7284d..cf659a5 100644
+--- a/scene/main/window.h
++++ b/scene/main/window.h
+@@ -31,6 +31,7 @@
+ #pragma once
+ 
+ #include "scene/main/viewport.h"
++#include "servers/rendering/rendering_native_surface.h"
+ #include "scene/resources/theme.h"
+ #include "servers/display/display_server_enums.h"
+ 
+@@ -189,6 +190,8 @@ private:
+ 
+ 	void _update_window_callbacks();
+ 
++	Ref<RenderingNativeSurface> native_surface;
++
+ 	Window *transient_parent = nullptr;
+ 	Window *exclusive_child = nullptr;
+ 	HashSet<Window *> transient_children;
+@@ -361,6 +364,9 @@ public:
+ 	virtual void set_visible(bool p_visible);
+ 	bool is_visible() const;
+ 
++	void set_native_surface(Ref<RenderingNativeSurface> p_native_surface);
++	Ref<RenderingNativeSurface> get_native_surface();
++
+ 	void update_mouse_cursor_state() override;
+ 
+ 	void show();
+diff --git a/servers/SCsub b/servers/SCsub
+index 1a547a1..38e97e9 100644
+--- a/servers/SCsub
++++ b/servers/SCsub
+@@ -4,6 +4,7 @@ from misc.utility.scons_hints import *
+ Import("env")
+ 
+ env.servers_sources = []
++env.add_source_files(env.servers_sources, "display_server_embedded*.cpp")
+ 
+ env.add_source_files(env.servers_sources, "register_server_types.cpp")
+ 
+diff --git a/servers/audio/audio_server.cpp b/servers/audio/audio_server.cpp
+index 98bb2ce..9f431b0 100644
+--- a/servers/audio/audio_server.cpp
++++ b/servers/audio/audio_server.cpp
+@@ -220,6 +220,11 @@ void AudioDriverManager::add_driver(AudioDriver *p_driver) {
+ 	drivers[driver_count++] = &AudioDriverManager::dummy_driver;
+ }
+ 
++void AudioDriverManager::reset() {
++	drivers[0] = &dummy_driver;
++	driver_count = 1;
++}
++
+ int AudioDriverManager::get_driver_count() {
+ 	return driver_count;
+ }
+diff --git a/servers/audio/audio_server.h b/servers/audio/audio_server.h
+index efb0a58..761f926 100644
+--- a/servers/audio/audio_server.h
++++ b/servers/audio/audio_server.h
+@@ -170,6 +170,7 @@ public:
+ 	static const int DEFAULT_MIX_RATE = 44100;
+ 
+ 	static void add_driver(AudioDriver *p_driver);
++	static void reset();
+ 	static void initialize(int p_driver);
+ 	static int get_driver_count();
+ 	static AudioDriver *get_driver(int p_driver);
+diff --git a/servers/navigation_2d/navigation_server_2d.cpp b/servers/navigation_2d/navigation_server_2d.cpp
+index e5d252e..db3defb 100644
+--- a/servers/navigation_2d/navigation_server_2d.cpp
++++ b/servers/navigation_2d/navigation_server_2d.cpp
+@@ -678,4 +678,5 @@ void NavigationServer2DManager::initialize_server_manager() {
+ void NavigationServer2DManager::finalize_server_manager() {
+ 	ERR_FAIL_NULL(singleton);
+ 	memdelete(singleton);
++	singleton = nullptr;
+ }
+diff --git a/servers/navigation_3d/navigation_server_3d.cpp b/servers/navigation_3d/navigation_server_3d.cpp
+index 3b4f8cd..8b118ea 100644
+--- a/servers/navigation_3d/navigation_server_3d.cpp
++++ b/servers/navigation_3d/navigation_server_3d.cpp
+@@ -1161,4 +1161,5 @@ void NavigationServer3DManager::initialize_server_manager() {
+ void NavigationServer3DManager::finalize_server_manager() {
+ 	ERR_FAIL_NULL(singleton);
+ 	memdelete(singleton);
++	singleton = nullptr;
+ }
+diff --git a/servers/register_server_types.cpp b/servers/register_server_types.cpp
+index de40333..4a1d14c 100644
+--- a/servers/register_server_types.cpp
++++ b/servers/register_server_types.cpp
+@@ -29,6 +29,9 @@
+ /**************************************************************************/
+ 
+ #include "register_server_types.h"
++#include "display_server_embedded.h"
++#include "display_server_embedded_host_interface.h"
++#include "rendering/rendering_native_surface.h"
+ 
+ #include "core/config/engine.h"
+ #include "core/config/project_settings.h"
+@@ -143,6 +146,15 @@ static bool has_server_feature_callback(const String &p_feature) {
+ 
+ static MovieWriterPNGWAV *writer_pngwav = nullptr;
+ 
++void register_core_server_types() {
++	GDREGISTER_ABSTRACT_CLASS(DisplayServer);
++	GDREGISTER_ABSTRACT_CLASS(RenderingNativeSurface);
++	GDREGISTER_CLASS(DisplayServerEmbeddedHostInterface);
++	GDREGISTER_ABSTRACT_CLASS(DisplayServerEmbedded);
++}
++
++void unregister_core_server_types() {}
++
+ void register_server_types() {
+ 	OS::get_singleton()->benchmark_begin_measure("Servers", "Register Extensions");
+ 
+@@ -161,7 +173,7 @@ void register_server_types() {
+ 	OS::get_singleton()->set_has_server_feature_callback(has_server_feature_callback);
+ 
+ 	GDREGISTER_ABSTRACT_CLASS(AccessibilityServer);
+-	GDREGISTER_ABSTRACT_CLASS(DisplayServer);
++
+ 	GDREGISTER_ABSTRACT_CLASS(RenderingServer);
+ 	GDREGISTER_CLASS(AudioServer);
+ 
+diff --git a/servers/register_server_types.h b/servers/register_server_types.h
+index c78f9bf..59ffbfa 100644
+--- a/servers/register_server_types.h
++++ b/servers/register_server_types.h
+@@ -30,6 +30,9 @@
+ 
+ #pragma once
+ 
++void register_core_server_types();
++void unregister_core_server_types();
++
+ void register_server_types();
+ void unregister_server_types();
+ 
+diff --git a/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp b/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp
+index b30e19c..b1607de 100644
+--- a/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp
++++ b/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp
+@@ -3638,4 +3638,5 @@ RenderForwardMobile::~RenderForwardMobile() {
+ 		RD::get_singleton()->free_rid(scene_state.lightmap_capture_buffer);
+ 		memdelete_arr(scene_state.lightmap_captures);
+ 	}
++	if (singleton == this) singleton = nullptr;
+ }
+diff --git a/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp b/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp
+index 0d598bf..b27049c 100644
+--- a/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp
++++ b/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp
+@@ -1001,4 +1001,5 @@ SceneShaderForwardMobile::~SceneShaderForwardMobile() {
+ 	material_storage->material_free(overdraw_material);
+ 	material_storage->material_free(default_material);
+ 	material_storage->material_free(debug_shadow_splits_material);
++	if (singleton == this) singleton = nullptr;
+ }
+diff --git a/servers/rendering/renderer_rd/framebuffer_cache_rd.cpp b/servers/rendering/renderer_rd/framebuffer_cache_rd.cpp
+index 4e45779..3135bbd 100644
+--- a/servers/rendering/renderer_rd/framebuffer_cache_rd.cpp
++++ b/servers/rendering/renderer_rd/framebuffer_cache_rd.cpp
+@@ -87,4 +87,5 @@ FramebufferCacheRD::~FramebufferCacheRD() {
+ 	if (cache_instances_used > 0) {
+ 		ERR_PRINT("At exit: " + itos(cache_instances_used) + " framebuffer cache instance(s) still in use.");
+ 	}
++	if (singleton == this) singleton = nullptr;
+ }
+diff --git a/servers/rendering/renderer_rd/renderer_compositor_rd.cpp b/servers/rendering/renderer_rd/renderer_compositor_rd.cpp
+index 06535cf..c0775c6 100644
+--- a/servers/rendering/renderer_rd/renderer_compositor_rd.cpp
++++ b/servers/rendering/renderer_rd/renderer_compositor_rd.cpp
+@@ -173,6 +173,9 @@ uint64_t RendererCompositorRD::frame = 1;
+ void RendererCompositorRD::finalize() {
+ 	texture_storage->_tex_blit_shader_free();
+ 	memdelete(scene);
++	// SkyRD member destruction still needs the scene singleton. Clear it afterwards.
++	RendererSceneRenderRD::singleton = nullptr;
++	scene = nullptr;
+ 	memdelete(canvas);
+ 	memdelete(fog);
+ 	memdelete(particles_storage);
+diff --git a/servers/rendering/renderer_rd/renderer_scene_render_rd.h b/servers/rendering/renderer_rd/renderer_scene_render_rd.h
+index 5c13984..aa27827 100644
+--- a/servers/rendering/renderer_rd/renderer_scene_render_rd.h
++++ b/servers/rendering/renderer_rd/renderer_scene_render_rd.h
+@@ -129,6 +129,7 @@ protected:
+ private:
+ 	RSE::ViewportDebugDraw debug_draw = RSE::VIEWPORT_DEBUG_DRAW_DISABLED;
+ 	static RendererSceneRenderRD *singleton;
++	friend class RendererCompositorRD;
+ 
+ 	/* Shadow atlas */
+ 	RSE::ShadowQuality shadows_quality = RSE::SHADOW_QUALITY_MAX; //So it always updates when first set
+diff --git a/servers/rendering/renderer_rd/uniform_set_cache_rd.cpp b/servers/rendering/renderer_rd/uniform_set_cache_rd.cpp
+index ff4602a..a67d919 100644
+--- a/servers/rendering/renderer_rd/uniform_set_cache_rd.cpp
++++ b/servers/rendering/renderer_rd/uniform_set_cache_rd.cpp
+@@ -82,4 +82,5 @@ UniformSetCacheRD::~UniformSetCacheRD() {
+ 	if (cache_instances_used > 0) {
+ 		ERR_PRINT("At exit: " + itos(cache_instances_used) + " uniform set cache instance(s) still in use.");
+ 	}
++	if (singleton == this) singleton = nullptr;
+ }
+diff --git a/servers/rendering/renderer_scene_cull.cpp b/servers/rendering/renderer_scene_cull.cpp
+index 26a7879..328497e 100644
+--- a/servers/rendering/renderer_scene_cull.cpp
++++ b/servers/rendering/renderer_scene_cull.cpp
+@@ -4551,4 +4551,5 @@ RendererSceneCull::~RendererSceneCull() {
+ 		memdelete(light_culler);
+ 		light_culler = nullptr;
+ 	}
++	if (singleton == this) singleton = nullptr;
+ }
+diff --git a/servers/rendering/rendering_server_default.cpp b/servers/rendering/rendering_server_default.cpp
+index 49b80b1..f303b71 100644
+--- a/servers/rendering/rendering_server_default.cpp
++++ b/servers/rendering/rendering_server_default.cpp
+@@ -266,11 +266,28 @@ void RenderingServerDefault::_finish() {
+ 
+ 	RSG::canvas->finalize();
+ 	memdelete(RSG::canvas);
++	RSG::canvas = nullptr;
+ 	RSG::rasterizer->finalize();
+ 	memdelete(RSG::viewport);
++	RSG::viewport = nullptr;
+ 	memdelete(RSG::rasterizer);
++	RSG::rasterizer = nullptr;
+ 	memdelete(RSG::scene);
++	RSG::scene = nullptr;
+ 	memdelete(RSG::camera_attributes);
++	RSG::camera_attributes = nullptr;
++
++	// These non-owning pointers must not escape into the next engine session.
++	RSG::threaded = false;
++	RSG::utilities = nullptr;
++	RSG::light_storage = nullptr;
++	RSG::material_storage = nullptr;
++	RSG::mesh_storage = nullptr;
++	RSG::particles_storage = nullptr;
++	RSG::texture_storage = nullptr;
++	RSG::gi = nullptr;
++	RSG::fog = nullptr;
++	RSG::canvas_render = nullptr;
+ }
+ 
+ void RenderingServerDefault::init() {
+diff --git a/thirdparty/metal-cpp/Metal/MTLIOCommandQueue.hpp b/thirdparty/metal-cpp/Metal/MTLIOCommandQueue.hpp
+index ac956c8..78de5d8 100644
+--- a/thirdparty/metal-cpp/Metal/MTLIOCommandQueue.hpp
++++ b/thirdparty/metal-cpp/Metal/MTLIOCommandQueue.hpp
+@@ -104,7 +104,7 @@ public:
+ };
+ 
+ }
+-_MTL_PRIVATE_DEF_CONST(NS::ErrorDomain, IOErrorDomain);
++_MTL_PRIVATE_DEF_WEAK_CONST(NS::ErrorDomain, IOErrorDomain);
+ _MTL_INLINE MTL::IOCommandBuffer* MTL::IOCommandQueue::commandBuffer()
+ {
+     return Object::sendMessage<MTL::IOCommandBuffer*>(this, _MTL_PRIVATE_SEL(commandBuffer));
+diff --git a/thirdparty/metal-cpp/Metal/MTLTensor.hpp b/thirdparty/metal-cpp/Metal/MTLTensor.hpp
+index 221b8c9..5f8b04e 100644
+--- a/thirdparty/metal-cpp/Metal/MTLTensor.hpp
++++ b/thirdparty/metal-cpp/Metal/MTLTensor.hpp
+@@ -134,7 +134,7 @@ public:
+ 
+ }
+ 
+-_MTL_PRIVATE_DEF_CONST(NS::ErrorDomain, TensorDomain);
++_MTL_PRIVATE_DEF_WEAK_CONST(NS::ErrorDomain, TensorDomain);
+ 
+ _MTL_INLINE MTL::TensorExtents* MTL::TensorExtents::alloc()
+ {
+diff --git a/core/extension/libgodot_embedding.h b/core/extension/libgodot_embedding.h
+new file mode 100644
+index 0000000..c68317b
+--- /dev/null
++++ b/core/extension/libgodot_embedding.h
+@@ -0,0 +1,12 @@
++// Host logging extension. The upstream LibGodot creation ABI is unchanged.
++#pragma once
++#include "libgodot.h"
++#ifdef __cplusplus
++extern "C" {
++#endif
++typedef void (*LibGodotHostLog)(void *data, const char *message, bool error);
++LIBGODOT_API int libgodot_embedding_api_version();
++LIBGODOT_API void libgodot_set_log_callback(LibGodotHostLog callback, void *data);
++#ifdef __cplusplus
++}
++#endif
+diff --git a/drivers/apple/rendering_native_surface_apple.h b/drivers/apple/rendering_native_surface_apple.h
+new file mode 100644
+index 0000000..11a13b2
+--- /dev/null
++++ b/drivers/apple/rendering_native_surface_apple.h
+@@ -0,0 +1,45 @@
++/**************************************************************************/
++/*  rendering_native_surface_apple.h                                      */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#pragma once
++#include "servers/rendering/rendering_native_surface.h"
++class RenderingNativeSurfaceApple : public RenderingNativeSurface {
++    GDCLASS(RenderingNativeSurfaceApple, RenderingNativeSurface);
++    void *layer = nullptr;
++protected:
++    static void _bind_methods();
++public:
++    static Ref<RenderingNativeSurfaceApple> create(int64_t layer);
++    int64_t get_layer() const { return (int64_t)layer; }
++    void *get_native_id() const override { return layer; }
++    const void *get_platform_data() const override { return &layer; }
++    RenderingContextDriver *create_rendering_context(const String &driver) override;
++    ~RenderingNativeSurfaceApple();
++};
+diff --git a/drivers/apple/rendering_native_surface_apple.mm b/drivers/apple/rendering_native_surface_apple.mm
+new file mode 100644
+index 0000000..cca15d5
+--- /dev/null
++++ b/drivers/apple/rendering_native_surface_apple.mm
+@@ -0,0 +1,61 @@
++/**************************************************************************/
++/*  rendering_native_surface_apple.h                                      */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#include "rendering_native_surface_apple.h"
++#ifdef METAL_ENABLED
++#include "drivers/metal/rendering_context_driver_metal.h"
++#import <QuartzCore/CAMetalLayer.h>
++#endif
++void RenderingNativeSurfaceApple::_bind_methods() {
++    ClassDB::bind_static_method("RenderingNativeSurfaceApple", D_METHOD("create", "layer"), &RenderingNativeSurfaceApple::create);
++    ClassDB::bind_method(D_METHOD("get_layer"), &RenderingNativeSurfaceApple::get_layer);
++}
++Ref<RenderingNativeSurfaceApple> RenderingNativeSurfaceApple::create(int64_t existing) {
++    Ref<RenderingNativeSurfaceApple> result; result.instantiate();
++#ifdef METAL_ENABLED
++    if (existing) result->layer = (__bridge_retained void *)(__bridge id)(void *)existing;
++    else {
++        __block CAMetalLayer *new_layer;
++        void (^create_layer)(void) = ^{ new_layer = [CAMetalLayer layer]; };
++        if ([NSThread isMainThread]) create_layer(); else dispatch_sync(dispatch_get_main_queue(), create_layer);
++        result->layer = (__bridge_retained void *)new_layer;
++    }
++#endif
++    return result;
++}
++RenderingContextDriver *RenderingNativeSurfaceApple::create_rendering_context(const String &driver) {
++#ifdef METAL_ENABLED
++    if (driver == "metal") return memnew(RenderingContextDriverMetal);
++#endif
++    return nullptr;
++}
++RenderingNativeSurfaceApple::~RenderingNativeSurfaceApple() {
++    if (layer) { CFRelease(layer); layer = nullptr; }
++}
+diff --git a/platform/ios/libgodot_ios.mm b/platform/ios/libgodot_ios.mm
+new file mode 100644
+index 0000000..f717bab
+--- /dev/null
++++ b/platform/ios/libgodot_ios.mm
+@@ -0,0 +1,72 @@
++/**************************************************************************/
++/*  libgodot_ios.mm                                                       */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#include "core/extension/godot_instance.h"
++#include "core/extension/libgodot.h"
++#include "main/main.h"
++#include "core/io/logger.h"
++#include <cstdio>
++#include "core/extension/libgodot_embedding.h"
++#include "servers/audio/audio_server.h"
++#import "os_ios.h"
++static GodotInstance *instance = nullptr;
++static LibGodotHostLog host_log = nullptr;
++static void *host_log_data = nullptr;
++int libgodot_embedding_api_version() { return 1; }
++void libgodot_set_log_callback(LibGodotHostLog callback, void *data) {
++    host_log = callback; host_log_data = data;
++}
++class HostLogger : public Logger {
++public:
++    void logv(const char *format, va_list args, bool error) override {
++        if (!host_log) return;
++        char message[4096]; vsnprintf(message, sizeof(message), format, args);
++        host_log(host_log_data, message, error);
++    }
++};
++GDExtensionObjectPtr libgodot_create_godot_instance(int argc, char *argv[], GDExtensionInitializationFunction init) {
++    ERR_FAIL_COND_V(instance != nullptr || argc < 1, nullptr);
++    AudioDriverManager::reset();
++    OS_IOS *os = new OS_IOS();
++    os->add_logger(memnew(HostLogger));
++    Error error = Main::setup(argv[0], argc - 1, &argv[1], false);
++    if (error != OK) { delete os; return nullptr; }
++    instance = memnew(GodotInstance);
++    if (!instance->initialize(init)) {
++        memdelete(instance); instance = nullptr; Main::cleanup(); delete os; return nullptr;
++    }
++    os->initialize_modules();
++    return (GDExtensionObjectPtr)instance;
++}
++void libgodot_destroy_godot_instance(GDExtensionObjectPtr ptr) {
++    if (!instance || ptr != instance) return;
++    instance->stop(); memdelete(instance); instance = nullptr;
++    Main::cleanup(); delete OS_IOS::get_singleton();
++}
+diff --git a/servers/display_server_embedded.cpp b/servers/display_server_embedded.cpp
+new file mode 100644
+index 0000000..c46ba53
+--- /dev/null
++++ b/servers/display_server_embedded.cpp
+@@ -0,0 +1,846 @@
++/**************************************************************************/
++/*  display_server_embedded.cpp                                           */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#include "display_server_embedded.h"
++#include "servers/display/native_menu.h"
++using namespace DisplayServerEnums;
++
++
++#include "core/config/project_settings.h"
++#include "core/io/file_access_pack.h"
++
++#ifdef RD_ENABLED
++#if defined(VULKAN_ENABLED)
++#include "drivers/vulkan/godot_vulkan.h"
++#endif // VULKAN_ENABLED
++#endif // RD_ENABLED
++
++Ref<RenderingNativeSurface> DisplayServerEmbedded::native_surface = nullptr;
++
++DisplayServerEmbedded *DisplayServerEmbedded::get_singleton() {
++	return (DisplayServerEmbedded *)DisplayServer::get_singleton();
++}
++
++void DisplayServerEmbedded::set_native_surface(Ref<RenderingNativeSurface> p_native_surface) {
++	native_surface = p_native_surface;
++}
++
++void DisplayServerEmbedded::set_screen_get_dpi_callback(Callable p_callback) {
++	screen_get_dpi_callback = p_callback;
++}
++
++void DisplayServerEmbedded::set_screen_get_size_callback(Callable p_callback) {
++	screen_get_size_callback = p_callback;
++}
++
++void DisplayServerEmbedded::set_screen_get_scale_callback(Callable p_callback) {
++	screen_get_scale_callback = p_callback;
++}
++
++void DisplayServerEmbedded::_bind_methods() {
++	ClassDB::bind_static_method("DisplayServerEmbedded", D_METHOD("set_native_surface", "native_surface"), &DisplayServerEmbedded::set_native_surface);
++	ClassDB::bind_static_method("DisplayServerEmbedded", D_METHOD("get_singleton"), &DisplayServerEmbedded::get_singleton);
++	ClassDB::bind_static_method("DisplayServerEmbedded", D_METHOD("set_screen_get_dpi_callback", "callback"), &DisplayServerEmbedded::set_screen_get_dpi_callback);
++	ClassDB::bind_static_method("DisplayServerEmbedded", D_METHOD("set_screen_get_size_callback", "callback"), &DisplayServerEmbedded::set_screen_get_size_callback);
++	ClassDB::bind_static_method("DisplayServerEmbedded", D_METHOD("set_screen_get_scale_callback", "callback"), &DisplayServerEmbedded::set_screen_get_scale_callback);
++	ClassDB::bind_method(D_METHOD("resize_window", "size", "id"), &DisplayServerEmbedded::resize_window);
++	ClassDB::bind_method(D_METHOD("set_content_scale", "content_scale"), &DisplayServerEmbedded::set_content_scale);
++	ClassDB::bind_method(D_METHOD("touches_canceled", "idx", "window"), &DisplayServerEmbedded::touches_canceled);
++	ClassDB::bind_method(D_METHOD("touch_press", "idx", "x", "y", "pressed", "double_click", "window"), &DisplayServerEmbedded::touch_press);
++	ClassDB::bind_method(D_METHOD("touch_drag", "idx", "prev_x", "prev_y", "x", "y", "pressure", "tilt", "window"), &DisplayServerEmbedded::touch_drag);
++	ClassDB::bind_method(D_METHOD("set_host_interface", "host_interface"), &DisplayServerEmbedded::set_host_interface);
++	ClassDB::bind_method(D_METHOD("delete_host_interface"), &DisplayServerEmbedded::delete_host_interface);
++}
++
++DisplayServerEmbedded::DisplayServerEmbedded(const String &p_rendering_driver, WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, Error &r_error) {
++	ERR_FAIL_NULL_MSG(native_surface, "Native surface has not been set.");
++
++	rendering_driver = p_rendering_driver;
++
++	native_menu = memnew(NativeMenu);
++
++#if defined(RD_ENABLED)
++	rendering_context = nullptr;
++	rendering_device = nullptr;
++
++	if (rendering_driver == "vulkan" || rendering_driver == "metal" || rendering_driver == "d3d12") {
++		rendering_context = native_surface->create_rendering_context(rendering_driver);
++	}
++
++	if (rendering_context) {
++		if (rendering_context->initialize() != OK) {
++			ERR_PRINT(vformat("Failed to initialize %s context", rendering_driver));
++			memdelete(rendering_context);
++			rendering_context = nullptr;
++			return;
++		}
++
++		if (create_native_window(native_surface) != MAIN_WINDOW_ID) {
++			ERR_PRINT(vformat("Failed to create %s window.", rendering_driver));
++			memdelete(rendering_context);
++			rendering_context = nullptr;
++			r_error = ERR_UNAVAILABLE;
++			return;
++		}
++
++		rendering_device = memnew(RenderingDevice);
++#ifdef EXTERNAL_TARGET_ENABLED
++		bool monitored_frames = true;
++#else
++		bool monitored_frames = false;
++#endif
++		rendering_device->initialize(rendering_context, MAIN_WINDOW_ID);
++		rendering_device->screen_create(MAIN_WINDOW_ID);
++
++#ifdef EXTERNAL_TARGET_ENABLED
++		native_surface->setup_external_swapchain_callbacks();
++#endif
++
++		RendererCompositorRD::make_current();
++	}
++#endif
++
++#if defined(GLES3_ENABLED)
++	if (rendering_driver.contains("opengl3")) {
++		PackedStringArray driver_candidates;
++        bool gldriver_novalidate = false;
++        if (rendering_driver == "opengl3_novalidate") {
++            rendering_driver ="opengl3";
++            gldriver_novalidate = true;
++        }
++		driver_candidates.push_back(rendering_driver);
++		#ifdef ANGLE_ENABLED
++		if (rendering_driver != "opengl3_angle") {
++			driver_candidates.push_back("opengl3_angle");
++		}
++		#endif
++		for (int i = 0; i < driver_candidates.size(); ++i) {
++			String driver_candidate = driver_candidates[i];
++			print_verbose(vformat("Initializing driver: %s", driver_candidate));
++
++			gl_manager = native_surface->create_gl_manager(driver_candidate);
++			if (gl_manager == nullptr) {
++				ERR_PRINT(vformat("Unable to instantiate GL Manager for driver: %s", driver_candidate));
++				continue;
++			}
++			if (gl_manager->initialize() != OK || gl_manager->open_display(nullptr) != OK) {
++				memdelete(gl_manager);
++				gl_manager = nullptr;
++				continue;
++			}
++
++			if (create_native_window(native_surface) != MAIN_WINDOW_ID) {
++				ERR_PRINT(vformat("Failed to create main window with driver: %s", driver_candidate));
++				memdelete(gl_manager);
++				gl_manager = nullptr;
++				continue;
++			}
++
++            bool validation_result = gl_manager->validate_driver();
++            if (!validation_result) {
++                print_verbose(vformat("GL driver validation failed: %s", driver_candidate));
++            }
++			if (gldriver_novalidate || validation_result) {
++                print_verbose(vformat("GL driver accepted: %s", driver_candidate));
++				rendering_driver = driver_candidate;
++				OS::get_singleton()->set_current_rendering_driver_name(rendering_driver);
++                break;
++			}
++
++            gl_manager->window_destroy(MAIN_WINDOW_ID);
++            window_id_counter = MAIN_WINDOW_ID;
++            memdelete(gl_manager);
++            gl_manager = nullptr;
++		}
++
++		if (gl_manager == nullptr) {
++			ERR_PRINT("Unable to initialize the display server with any of the OpenGL drivers.");
++			r_error = ERR_UNAVAILABLE;
++			return;
++		}
++	}
++#endif
++
++	Input::get_singleton()->set_event_dispatch_function(_dispatch_input_events);
++
++	r_error = OK;
++}
++
++DisplayServerEmbedded::~DisplayServerEmbedded() {
++	if (native_menu) {
++		memdelete(native_menu);
++		native_menu = nullptr;
++	}
++
++#if defined(RD_ENABLED)
++	if (rendering_device) {
++		rendering_device->screen_free(MAIN_WINDOW_ID);
++		memdelete(rendering_device);
++		rendering_device = nullptr;
++	}
++
++	if (rendering_context) {
++		rendering_context->window_destroy(MAIN_WINDOW_ID);
++		memdelete(rendering_context);
++		rendering_context = nullptr;
++	}
++#endif
++
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		gl_manager->window_destroy(MAIN_WINDOW_ID);
++		memdelete(gl_manager);
++		gl_manager = nullptr;
++	}
++#endif
++	// Release native surface
++	native_surface = nullptr;
++}
++
++DisplayServer *DisplayServerEmbedded::create_func(const String &p_rendering_driver, WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, int64_t /* p_parent_window */, Error &r_error) {
++	return memnew(DisplayServerEmbedded(p_rendering_driver, p_mode, p_vsync_mode, p_flags, p_position, p_resolution, p_screen, p_context, r_error));
++}
++
++Vector<String> DisplayServerEmbedded::get_rendering_drivers_func() {
++	Vector<String> drivers;
++
++#if defined(VULKAN_ENABLED)
++	drivers.push_back("vulkan");
++#endif
++#if defined(METAL_ENABLED)
++	drivers.push_back("metal");
++#endif
++#if defined(GLES3_ENABLED)
++	drivers.push_back("opengl3");
++    drivers.push_back("opengl3_novalidate");
++#endif
++#if defined(ANGLE_ENABLED)
++	drivers.push_back("opengl3_angle");
++#endif
++	return drivers;
++}
++
++void DisplayServerEmbedded::register_embedded_driver() {
++	for (int i = 0; i < get_create_function_count(); ++i) {
++		if (String(get_create_function_name(i)) == "embedded") return;
++	}
++	register_create_function("embedded", create_func, get_rendering_drivers_func);
++}
++
++// MARK: Events
++
++void DisplayServerEmbedded::window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window) {
++	window_resize_callbacks[p_window] = p_callable;
++}
++
++void DisplayServerEmbedded::window_set_window_event_callback(const Callable &p_callable, WindowID p_window) {
++	window_event_callbacks[p_window] = p_callable;
++}
++void DisplayServerEmbedded::window_set_input_event_callback(const Callable &p_callable, WindowID p_window) {
++	input_event_callbacks[p_window] = p_callable;
++}
++
++void DisplayServerEmbedded::window_set_input_text_callback(const Callable &p_callable, WindowID p_window) {
++	input_text_callbacks[p_window] = p_callable;
++}
++
++void DisplayServerEmbedded::window_set_drop_files_callback(const Callable &p_callable, WindowID p_window) {
++	// Not supported
++}
++
++void DisplayServerEmbedded::process_events() {
++	Input::get_singleton()->flush_buffered_events();
++}
++
++void DisplayServerEmbedded::_dispatch_input_events(const Ref<InputEvent> &p_event) {
++	Ref<InputEventFromWindow> event_from_window = p_event;
++	WindowID window_id = INVALID_WINDOW_ID;
++	if (event_from_window.is_valid()) {
++		window_id = event_from_window->get_window_id();
++	}
++	DisplayServerEmbedded::get_singleton()->send_input_event(p_event, window_id);
++}
++
++void DisplayServerEmbedded::send_input_event(const Ref<InputEvent> &p_event, WindowID p_id) const {
++	if (p_id != INVALID_WINDOW_ID) {
++		_window_callback(input_event_callbacks[p_id], p_event);
++	} else {
++		for (const KeyValue<WindowID, Callable> &E : input_event_callbacks) {
++			_window_callback(E.value, p_event);
++		}
++	}
++}
++
++void DisplayServerEmbedded::send_input_text(const String &p_text, WindowID p_id) const {
++	_window_callback(input_text_callbacks[p_id], p_text);
++}
++
++void DisplayServerEmbedded::send_window_event(DisplayServerEnums::WindowEvent p_event, WindowID p_id) const {
++	_window_callback(window_event_callbacks[p_id], int(p_event));
++}
++
++void DisplayServerEmbedded::_window_callback(const Callable &p_callable, const Variant &p_arg) const {
++	if (!p_callable.is_null()) {
++		p_callable.call(p_arg);
++	}
++}
++
++// MARK: - Input
++
++// MARK: Mouse
++
++void DisplayServerEmbedded::mouse_set_mode(DisplayServerEnums::MouseMode p_mode) {
++	mouse_mode = p_mode;
++}
++
++DisplayServerEnums::MouseMode DisplayServerEmbedded::mouse_get_mode() const {
++	return mouse_mode;
++}
++
++Point2i DisplayServerEmbedded::mouse_get_position() const {
++	return mouse_position;
++}
++
++BitField<MouseButtonMask> DisplayServerEmbedded::mouse_get_button_state() const {
++	return mouse_button_state;
++}
++
++void DisplayServerEmbedded::mouse_button(int p_x, int p_y, MouseButton p_mouse_button_index, bool p_pressed, bool p_double_click, bool p_cancelled, DisplayServerEnums::WindowID p_window) {
++	Ref<InputEventMouseButton> ev;
++	ev.instantiate();
++
++	ev->set_window_id(p_window);
++	ev->set_button_index(p_mouse_button_index);
++	ev->set_pressed(p_pressed);
++	ev->set_double_click(p_double_click);
++	ev->set_canceled(p_cancelled);
++	ev->set_position(Vector2(p_x, p_y));
++	mouse_position = Point2i(p_x, p_y);
++
++	if (ev->is_pressed()) {
++		mouse_button_state.set_flag(mouse_button_to_mask(ev->get_button_index()));
++	} else {
++		mouse_button_state.clear_flag(mouse_button_to_mask(ev->get_button_index()));
++	}
++	ev->set_button_mask(mouse_button_state);
++
++	perform_event(ev);
++}
++
++void DisplayServerEmbedded::mouse_motion(int p_prev_x, int p_prev_y, int p_x, int p_y, DisplayServerEnums::WindowID p_window) {
++	Ref<InputEventMouseMotion> ev;
++	ev.instantiate();
++
++	ev->set_window_id(p_window);
++	ev->set_position(Vector2(p_x, p_y));
++
++	mouse_position = Point2i(p_x, p_y);
++
++	ev->set_relative(Vector2(p_x - p_prev_x, p_y - p_prev_y));
++	ev->set_button_mask(mouse_button_state);
++
++	perform_event(ev);
++}
++
++// MARK: Touches
++
++void DisplayServerEmbedded::touch_press(int p_idx, int p_x, int p_y, bool p_pressed, bool p_double_click, DisplayServerEnums::WindowID p_window) {
++	Ref<InputEventScreenTouch> ev;
++	ev.instantiate();
++
++	ev->set_window_id(p_window);
++	ev->set_index(p_idx);
++	ev->set_pressed(p_pressed);
++	ev->set_position(Vector2(p_x, p_y));
++	ev->set_double_tap(p_double_click);
++	perform_event(ev);
++}
++
++void DisplayServerEmbedded::touch_drag(int p_idx, int p_prev_x, int p_prev_y, int p_x, int p_y, float p_pressure, Vector2 p_tilt, DisplayServerEnums::WindowID p_window) {
++	Ref<InputEventScreenDrag> ev;
++	ev.instantiate();
++	ev->set_window_id(p_window);
++	ev->set_index(p_idx);
++	ev->set_pressure(p_pressure);
++	ev->set_tilt(p_tilt);
++	ev->set_position(Vector2(p_x, p_y));
++	ev->set_relative(Vector2(p_x - p_prev_x, p_y - p_prev_y));
++	ev->set_relative_screen_position(ev->get_relative());
++	perform_event(ev);
++}
++
++void DisplayServerEmbedded::perform_event(const Ref<InputEvent> &p_event) {
++	Input::get_singleton()->parse_input_event(p_event);
++}
++
++void DisplayServerEmbedded::touches_canceled(int p_idx, DisplayServerEnums::WindowID p_window) {
++	touch_press(p_idx, -1, -1, false, false, p_window);
++}
++
++void DisplayServerEmbedded::key(Key p_key, char32_t p_char, Key p_unshifted, Key p_physical, BitField<KeyModifierMask> p_modifiers, bool p_pressed, DisplayServerEnums::WindowID p_window) {
++	Ref<InputEventKey> ev;
++	ev.instantiate();
++	ev->set_window_id(p_window);
++	ev->set_echo(false);
++	ev->set_pressed(p_pressed);
++	ev->set_keycode(fix_keycode(p_char, p_key));
++	if (p_key != Key::SHIFT) {
++		ev->set_shift_pressed(p_modifiers.has_flag(KeyModifierMask::SHIFT));
++	}
++	if (p_key != Key::CTRL) {
++		ev->set_ctrl_pressed(p_modifiers.has_flag(KeyModifierMask::CTRL));
++	}
++	if (p_key != Key::ALT) {
++		ev->set_alt_pressed(p_modifiers.has_flag(KeyModifierMask::ALT));
++	}
++	if (p_key != Key::META) {
++		ev->set_meta_pressed(p_modifiers.has_flag(KeyModifierMask::META));
++	}
++	ev->set_key_label(p_unshifted);
++	ev->set_physical_keycode(p_physical);
++	ev->set_unicode(fix_unicode(p_char));
++	perform_event(ev);
++}
++
++// MARK: -
++
++bool DisplayServerEmbedded::has_feature(Feature p_feature) const {
++	switch (p_feature) {
++#ifndef DISABLE_DEPRECATED
++		case FEATURE_GLOBAL_MENU: {
++			return (native_menu && native_menu->has_feature(NativeMenu::FEATURE_GLOBAL_MENU));
++		} break;
++#endif
++		case FEATURE_CURSOR_SHAPE:
++		// case FEATURE_CUSTOM_CURSOR_SHAPE:
++		// case FEATURE_HIDPI:
++		// case FEATURE_ICON:
++		// case FEATURE_IME:
++		case FEATURE_MOUSE:
++		// case FEATURE_MOUSE_WARP:
++		// case FEATURE_NATIVE_DIALOG:
++		// case FEATURE_NATIVE_ICON:
++		// case FEATURE_WINDOW_TRANSPARENCY:
++		//case FEATURE_CLIPBOARD:
++		//case FEATURE_KEEP_SCREEN_ON:
++		//case FEATURE_ORIENTATION:
++		//case FEATURE_VIRTUAL_KEYBOARD:
++		//case FEATURE_TEXT_TO_SPEECH:
++		case FEATURE_SUBWINDOWS:
++		case FEATURE_TOUCHSCREEN:
++			return true;
++		default:
++			return false;
++	}
++}
++
++String DisplayServerEmbedded::get_name() const {
++	return "embedded";
++}
++
++int DisplayServerEmbedded::get_screen_count() const {
++	return 1;
++}
++
++int DisplayServerEmbedded::get_primary_screen() const {
++	return 0;
++}
++
++Point2i DisplayServerEmbedded::screen_get_position(int p_screen) const {
++	return Size2i();
++}
++
++Size2i DisplayServerEmbedded::screen_get_size(int p_screen) const {
++	if (screen_get_size_callback.is_valid()) {
++		return screen_get_size_callback.call(p_screen);
++	}
++	return window_get_size(MAIN_WINDOW_ID);
++}
++
++float DisplayServerEmbedded::screen_get_scale(int p_screen) const {
++	if (screen_get_scale_callback.is_valid()) {
++		return screen_get_scale_callback.call(p_screen);
++	}
++	return DisplayServer::screen_get_scale(p_screen);
++}
++
++Rect2i DisplayServerEmbedded::screen_get_usable_rect(int p_screen) const {
++	return Rect2i(screen_get_position(p_screen), screen_get_size(p_screen));
++}
++
++int DisplayServerEmbedded::screen_get_dpi(int p_screen) const {
++	if (screen_get_dpi_callback.is_valid()) {
++		return screen_get_dpi_callback.call(p_screen);
++	}
++	return 96;
++}
++
++float DisplayServerEmbedded::screen_get_refresh_rate(int p_screen) const {
++	return -1;
++}
++
++Vector<DisplayServerEnums::WindowID> DisplayServerEmbedded::get_window_list() const {
++	Vector<DisplayServerEnums::WindowID> list;
++	list.push_back(MAIN_WINDOW_ID);
++	return list;
++}
++
++DisplayServerEnums::WindowID DisplayServerEmbedded::get_window_at_screen_position(const Point2i &p_position) const {
++	return MAIN_WINDOW_ID;
++}
++
++DisplayServerEnums::WindowID DisplayServerEmbedded::create_native_window(Ref<RenderingNativeSurface> p_native_surface) {
++	WindowID window_id = window_id_counter++;
++	window_surfaces[window_id] = p_native_surface;
++	surface_to_window_id[p_native_surface] = window_id;
++
++#if defined(RD_ENABLED)
++	if (rendering_context) {
++		if (rendering_context->window_create(window_id, p_native_surface->get_platform_data()) != OK) {
++			ERR_PRINT(vformat("Failed to create native window."));
++			return INVALID_WINDOW_ID;
++		}
++
++		if (rendering_device) {
++			rendering_device->screen_create(window_id);
++		}
++		return window_id;
++	}
++#endif
++
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		if (gl_manager->window_create(window_id, p_native_surface, 0, 0) != OK) {
++			ERR_FAIL_V_MSG(INVALID_WINDOW_ID, "GL manager failed to create window");
++		}
++		gl_manager->window_make_current(window_id);
++		RasterizerGLES3::make_current(false);
++		return window_id;
++	}
++#endif
++	ERR_FAIL_V_MSG(INVALID_WINDOW_ID, "Cannot create native window with current driver.");
++}
++
++bool DisplayServerEmbedded::is_native_window(DisplayServerEnums::WindowID p_id) {
++	return true;
++}
++
++void DisplayServerEmbedded::delete_native_window(DisplayServerEnums::WindowID p_id) {
++#if defined(RD_ENABLED)
++	if (rendering_device) {
++		rendering_device->screen_free(p_id);
++	}
++
++	if (rendering_context) {
++		rendering_context->window_destroy(p_id);
++	}
++#endif
++
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		gl_manager->window_destroy(p_id);
++	}
++#endif
++
++	surface_to_window_id.erase(window_surfaces[p_id]);
++	window_surfaces.erase(p_id);
++}
++
++int64_t DisplayServerEmbedded::window_get_native_handle(HandleType p_handle_type, WindowID p_window) const {
++	switch (p_handle_type) {
++#if defined(GLES3_ENABLED)
++		case OPENGL_FBO: {
++			if (gl_manager) {
++				return gl_manager->window_get_render_target(p_window);
++			}
++			return 0;
++		}
++		case WINDOW_HANDLE: {
++			if (gl_manager) {
++				return (int64_t)gl_manager->window_get_color_texture(p_window);
++			}
++			return 0;
++		}
++#endif
++		default: {
++			return 0;	// Not supported.
++		}
++	}
++}
++
++void DisplayServerEmbedded::window_attach_instance_id(ObjectID p_instance, WindowID p_window) {
++	window_attached_instance_id[p_window] = p_instance;
++}
++
++ObjectID DisplayServerEmbedded::window_get_attached_instance_id(WindowID p_window) const {
++	return window_attached_instance_id[p_window];
++}
++
++void DisplayServerEmbedded::window_set_title(const String &p_title, WindowID p_window) {
++	// Not supported
++}
++
++int DisplayServerEmbedded::window_get_current_screen(WindowID p_window) const {
++	return SCREEN_OF_MAIN_WINDOW;
++}
++
++void DisplayServerEmbedded::window_set_current_screen(int p_screen, WindowID p_window) {
++	// Not supported
++}
++
++Point2i DisplayServerEmbedded::window_get_position(WindowID p_window) const {
++	return Point2i();
++}
++
++Point2i DisplayServerEmbedded::window_get_position_with_decorations(WindowID p_window) const {
++	return Point2i();
++}
++
++void DisplayServerEmbedded::window_set_position(const Point2i &p_position, WindowID p_window) {
++	// Probably not supported for single window iOS app
++}
++
++void DisplayServerEmbedded::window_set_transient(WindowID p_window, WindowID p_parent) {
++	// Not supported
++}
++
++void DisplayServerEmbedded::window_set_max_size(const Size2i p_size, WindowID p_window) {
++	// Not supported
++}
++
++Size2i DisplayServerEmbedded::window_get_max_size(WindowID p_window) const {
++	return Size2i();
++}
++
++void DisplayServerEmbedded::window_set_min_size(const Size2i p_size, WindowID p_window) {
++	// Not supported
++}
++
++Size2i DisplayServerEmbedded::window_get_min_size(WindowID p_window) const {
++	return Size2i();
++}
++
++void DisplayServerEmbedded::window_set_size(const Size2i p_size, WindowID p_window) {
++	window_sizes[p_window] = p_size;
++}
++
++Size2i DisplayServerEmbedded::window_get_size(WindowID p_window) const {
++#if defined(RD_ENABLED)
++	if (rendering_context) {
++		uint32_t width = 0;
++		uint32_t height = 0;
++		const auto surface = rendering_context->surface_get_from_window(p_window);
++		width = rendering_context->surface_get_width(surface);
++		height = rendering_context->surface_get_height(surface);
++		return Size2i(width, height);
++	}
++#endif
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		return gl_manager->window_get_size(p_window);
++	}
++#endif
++	if (window_sizes.has(p_window)) {
++		return window_sizes[p_window];
++	}
++	return Size2i();
++}
++
++Size2i DisplayServerEmbedded::window_get_size_with_decorations(WindowID p_window) const {
++	return window_get_size(p_window);
++}
++
++void DisplayServerEmbedded::window_set_mode(WindowMode p_mode, WindowID p_window) {
++	// Not supported
++}
++
++DisplayServerEnums::WindowMode DisplayServerEmbedded::window_get_mode(WindowID p_window) const {
++	return WindowMode::WINDOW_MODE_FULLSCREEN;
++}
++
++bool DisplayServerEmbedded::window_is_maximize_allowed(WindowID p_window) const {
++	return false;
++}
++
++void DisplayServerEmbedded::window_set_flag(WindowFlags p_flag, bool p_enabled, WindowID p_window) {
++	// Not supported
++}
++
++bool DisplayServerEmbedded::window_get_flag(WindowFlags p_flag, WindowID p_window) const {
++	return false;
++}
++
++void DisplayServerEmbedded::window_request_attention(WindowID p_window) {
++	// Not supported
++}
++
++void DisplayServerEmbedded::window_move_to_foreground(WindowID p_window) {
++	// Not supported
++}
++
++bool DisplayServerEmbedded::window_is_focused(WindowID p_window) const {
++	return true;
++}
++
++float DisplayServerEmbedded::screen_get_max_scale() const {
++	return screen_get_scale(SCREEN_OF_MAIN_WINDOW);
++}
++
++bool DisplayServerEmbedded::window_can_draw(WindowID p_window) const {
++	return true;
++}
++
++bool DisplayServerEmbedded::can_any_window_draw() const {
++	return true;
++}
++
++bool DisplayServerEmbedded::is_touchscreen_available() const {
++	return true;
++}
++
++void DisplayServerEmbedded::resize_window(Size2i p_size, WindowID p_id) {
++	Size2i size = p_size * content_scale;
++
++#if defined(RD_ENABLED)
++	if (rendering_context) {
++		rendering_context->window_set_size(p_id, size.x, size.y);
++	}
++#endif
++
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		gl_manager->window_resize(p_id, size.width, size.height);
++	}
++#endif
++
++	Variant resize_rect = Rect2i(Point2i(), size);
++	_window_callback(window_resize_callbacks[p_id], resize_rect);
++}
++
++void DisplayServerEmbedded::set_content_scale(float p_scale) {
++	content_scale = p_scale;
++}
++
++void DisplayServerEmbedded::window_set_vsync_mode(DisplayServerEnums::VSyncMode p_vsync_mode, WindowID p_window) {
++	// Not supported
++}
++
++DisplayServerEnums::VSyncMode DisplayServerEmbedded::window_get_vsync_mode(WindowID p_window) const {
++	return DisplayServerEnums::VSYNC_ENABLED;
++}
++
++void DisplayServerEmbedded::swap_buffers() {
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		gl_manager->swap_buffers();
++	}
++#endif
++}
++
++uint64_t DisplayServerEmbedded::get_native_window_id(WindowID p_id) const {
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		return gl_manager->window_get_render_target(p_id);
++	}
++#endif
++	return 0;
++}
++
++DisplayServerEnums::WindowID DisplayServerEmbedded::get_native_surface_window_id(Ref<RenderingNativeSurface> p_native_surface) const {
++	ERR_FAIL_COND_V(!surface_to_window_id.has(p_native_surface), DisplayServerEnums::INVALID_WINDOW_ID);
++	return surface_to_window_id[p_native_surface];
++}
++
++void DisplayServerEmbedded::gl_window_make_current(DisplayServerEnums::WindowID p_window_id) {
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		gl_manager->window_make_current(p_window_id);
++	}
++	current_window = p_window_id;
++#endif
++}
++
++void DisplayServerEmbedded::set_host_interface(Ref<DisplayServerEmbeddedHostInterface> p_host_interface) {
++	host_interface = p_host_interface;
++}
++
++DisplayServerEnums::CursorShape DisplayServerEmbedded::cursor_get_shape() const {
++	if (host_interface.is_valid()) {
++		return (DisplayServerEnums::CursorShape)host_interface->cursor_get_shape();
++	}
++
++	ERR_FAIL_V_MSG(DisplayServerEnums::CursorShape::CURSOR_ARROW, "No host interface set.");
++}
++
++void DisplayServerEmbedded::cursor_set_shape(DisplayServerEnums::CursorShape p_shape) {
++	if (host_interface.is_valid()) {
++		host_interface->cursor_set_shape((Input::CursorShape)p_shape);
++	}
++}
++
++void DisplayServerEmbedded::delete_host_interface() {
++	host_interface = nullptr;
++}
++
++void DisplayServerEmbedded::pre_draw_viewport(RID p_render_target) {
++#if defined(GLES3_ENABLED)
++	GLES3::TextureStorage *texture_storage = GLES3::TextureStorage::get_singleton();
++	if (texture_storage == nullptr) {
++		return;
++	}
++#if defined(EGL_STATIC)
++	if (gl_manager) {
++		texture_storage->render_target_set_reattach_textures(p_render_target, true);
++	}
++#endif
++#endif
++}
++
++void DisplayServerEmbedded::post_draw_viewport(RID p_render_target) {
++#if defined(GLES3_ENABLED)
++	GLES3::TextureStorage *texture_storage = GLES3::TextureStorage::get_singleton();
++	if (texture_storage == nullptr) {
++		return;
++	}
++#if defined(EGL_STATIC)
++	if (gl_manager) {
++		texture_storage->render_target_set_reattach_textures(p_render_target, false);
++	}
++#endif
++#endif
++}
++
++void DisplayServerEmbedded::release_rendering_thread() {
++#if defined(GLES3_ENABLED)
++	if (gl_manager) {
++		gl_manager->release_current();
++	}
++#endif
++}
+diff --git a/servers/display_server_embedded.h b/servers/display_server_embedded.h
+new file mode 100644
+index 0000000..e0a9e58
+--- /dev/null
++++ b/servers/display_server_embedded.h
+@@ -0,0 +1,251 @@
++/**************************************************************************/
++/*  display_server_embedded.h                                             */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#ifndef DISPLAY_SERVER_EMBEDDED_H
++#define DISPLAY_SERVER_EMBEDDED_H
++
++#include "core/input/input.h"
++#include "display_server_embedded_host_interface.h"
++
++#include "servers/display/display_server.h"
++using namespace DisplayServerEnums;
++#include "servers/rendering/rendering_native_surface.h"
++
++#if defined(RD_ENABLED)
++#include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
++#include "servers/rendering/rendering_device.h"
++#endif
++
++#if defined(GLES3_ENABLED)
++#include "drivers/gles3/rasterizer_gles3.h"
++
++#include "servers/rendering/gl_manager.h"
++#endif // GLES3_ENABLED
++
++class DisplayServerEmbedded : public DisplayServer {
++	GDCLASS(DisplayServerEmbedded, DisplayServer)
++
++	_THREAD_SAFE_CLASS_
++
++#if defined(RD_ENABLED)
++	RenderingContextDriver *rendering_context = nullptr;
++	RenderingDevice *rendering_device = nullptr;
++#endif
++#if defined(GLES3_ENABLED)
++	GLManager *gl_manager = nullptr;
++#endif
++	NativeMenu *native_menu = nullptr;
++
++	DisplayServerEnums::ScreenOrientation screen_orientation;
++
++	HashMap<WindowID, ObjectID> window_attached_instance_id;
++
++	HashMap<WindowID, Callable> window_event_callbacks;
++	HashMap<WindowID, Callable> window_resize_callbacks;
++	HashMap<WindowID, Callable> input_event_callbacks;
++	HashMap<WindowID, Callable> input_text_callbacks;
++
++	float content_scale = 1.0f;
++
++	WindowID window_id_counter = MAIN_WINDOW_ID;
++
++	DisplayServerEnums::MouseMode mouse_mode = DisplayServerEnums::MOUSE_MODE_VISIBLE;
++
++	void perform_event(const Ref<InputEvent> &p_event);
++
++	static Ref<RenderingNativeSurface> native_surface;
++	HashMap<WindowID, Ref<RenderingNativeSurface>> window_surfaces;
++	HashMap<Ref<RenderingNativeSurface>, WindowID> surface_to_window_id;
++	HashMap<WindowID, Size2i> window_sizes;
++
++#if defined(GLES3_ENABLED)
++	WindowID current_window = INVALID_WINDOW_ID;
++#endif
++
++	Point2i mouse_position;
++	BitField<MouseButtonMask> mouse_button_state;
++
++	static inline Callable screen_get_dpi_callback;
++	static inline Callable screen_get_size_callback;
++	static inline Callable screen_get_scale_callback;
++
++	DisplayServerEmbedded(const String &p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, Error &r_error);
++	~DisplayServerEmbedded();
++
++protected:
++	Ref<DisplayServerEmbeddedHostInterface> host_interface;
++
++	static void _bind_methods();
++
++public:
++	String rendering_driver;
++
++	static DisplayServerEmbedded *get_singleton();
++
++	static void set_native_surface(Ref<RenderingNativeSurface> p_native_handle);
++	static void set_screen_get_dpi_callback(Callable p_callback);
++	static void set_screen_get_size_callback(Callable p_callback);
++	static void set_screen_get_scale_callback(Callable p_callback);
++
++	static void register_embedded_driver();
++	static DisplayServer *create_func(const String &p_rendering_driver, WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, int64_t p_parent_window, Error &r_error);
++	static Vector<String> get_rendering_drivers_func();
++
++	// MARK: - Events
++
++	virtual void process_events() override;
++
++	virtual void window_set_rect_changed_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual void window_set_window_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual void window_set_input_event_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual void window_set_input_text_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual void window_set_drop_files_callback(const Callable &p_callable, WindowID p_window = MAIN_WINDOW_ID) override;
++
++	static void _dispatch_input_events(const Ref<InputEvent> &p_event);
++	void send_input_event(const Ref<InputEvent> &p_event, DisplayServerEnums::WindowID p_id = MAIN_WINDOW_ID) const;
++	void send_input_text(const String &p_text, DisplayServerEnums::WindowID p_id = MAIN_WINDOW_ID) const;
++	void send_window_event(DisplayServerEnums::WindowEvent p_event, DisplayServerEnums::WindowID p_id = MAIN_WINDOW_ID) const;
++	void _window_callback(const Callable &p_callable, const Variant &p_arg) const;
++
++	// MARK: - Input
++
++	// MARK: Mouse
++	virtual void mouse_set_mode(DisplayServerEnums::MouseMode p_mode) override;
++	virtual DisplayServerEnums::MouseMode mouse_get_mode() const override;
++
++	virtual Point2i mouse_get_position() const override;
++	virtual BitField<MouseButtonMask> mouse_get_button_state() const override;
++
++	virtual void mouse_button(int p_x, int p_y, MouseButton p_mouse_button_index, bool p_pressed, bool p_double_click, bool p_cancelled, DisplayServerEnums::WindowID p_window);
++	virtual void mouse_motion(int p_prev_x, int p_prev_y, int p_x, int p_y, DisplayServerEnums::WindowID p_window);
++
++	// MARK: Touches and Apple Pencil
++
++	virtual void touch_press(int p_idx, int p_x, int p_y, bool p_pressed, bool p_double_click, DisplayServerEnums::WindowID p_window);
++	virtual void touch_drag(int p_idx, int p_prev_x, int p_prev_y, int p_x, int p_y, float p_pressure, Vector2 p_tilt, DisplayServerEnums::WindowID p_window);
++	void touches_canceled(int p_idx, DisplayServerEnums::WindowID p_window);
++
++	// MARK: Keyboard
++
++	virtual void key(Key p_key, char32_t p_char, Key p_unshifted, Key p_physical, BitField<KeyModifierMask> p_modifiers, bool p_pressed, DisplayServerEnums::WindowID p_window);
++
++	// MARK: -
++
++	virtual bool has_feature(Feature p_feature) const override;
++	virtual String get_name() const override;
++
++	virtual int get_screen_count() const override;
++	virtual int get_primary_screen() const override;
++	virtual Point2i screen_get_position(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
++	virtual Size2i screen_get_size(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
++	virtual float screen_get_scale(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
++	virtual Rect2i screen_get_usable_rect(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
++	virtual int screen_get_dpi(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
++	virtual float screen_get_refresh_rate(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
++
++	virtual Vector<DisplayServerEnums::WindowID> get_window_list() const override;
++
++	virtual WindowID get_window_at_screen_position(const Point2i &p_position) const override;
++
++	virtual WindowID create_native_window(Ref<RenderingNativeSurface> p_native_window);
++	virtual bool is_native_window(WindowID p_id);
++	virtual void delete_native_window(WindowID p_id);
++
++	virtual int64_t window_get_native_handle(HandleType p_handle_type, WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual void window_attach_instance_id(ObjectID p_instance, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual ObjectID window_get_attached_instance_id(WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual void window_set_title(const String &p_title, WindowID p_window = MAIN_WINDOW_ID) override;
++	void show_window(WindowID p_window = MAIN_WINDOW_ID) override {
++		// UIKit owns attachment and visibility of the single main surface.
++		ERR_FAIL_COND_MSG(p_window != MAIN_WINDOW_ID, "Only the embedded main window is supported.");
++	}
++
++	virtual int window_get_current_screen(WindowID p_window = MAIN_WINDOW_ID) const override;
++	virtual void window_set_current_screen(int p_screen, WindowID p_window = MAIN_WINDOW_ID) override;
++
++	virtual Point2i window_get_position(WindowID p_window = MAIN_WINDOW_ID) const override;
++	virtual Point2i window_get_position_with_decorations(WindowID p_window = MAIN_WINDOW_ID) const override;
++	virtual void window_set_position(const Point2i &p_position, WindowID p_window = MAIN_WINDOW_ID) override;
++
++	virtual void window_set_transient(WindowID p_window, WindowID p_parent) override;
++
++	virtual void window_set_max_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual Size2i window_get_max_size(WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual void window_set_min_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual Size2i window_get_min_size(WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual void window_set_size(const Size2i p_size, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual Size2i window_get_size(WindowID p_window = MAIN_WINDOW_ID) const override;
++	virtual Size2i window_get_size_with_decorations(WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual void window_set_mode(WindowMode p_mode, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual WindowMode window_get_mode(WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual bool window_is_maximize_allowed(WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual void window_set_flag(WindowFlags p_flag, bool p_enabled, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual bool window_get_flag(WindowFlags p_flag, WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual void window_request_attention(WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual void window_move_to_foreground(WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual bool window_is_focused(WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual float screen_get_max_scale() const override;
++
++	virtual bool window_can_draw(WindowID p_window = MAIN_WINDOW_ID) const override;
++
++	virtual bool can_any_window_draw() const override;
++
++	virtual void window_set_vsync_mode(DisplayServerEnums::VSyncMode p_vsync_mode, WindowID p_window = MAIN_WINDOW_ID) override;
++	virtual DisplayServerEnums::VSyncMode window_get_vsync_mode(WindowID p_vsync_mode) const override;
++
++	virtual bool is_touchscreen_available() const override;
++
++	void resize_window(Size2i size, WindowID p_id);
++	void set_content_scale(float p_scale);
++	virtual void swap_buffers() override;
++	virtual uint64_t get_native_window_id(WindowID p_id = MAIN_WINDOW_ID) const;
++	virtual WindowID get_native_surface_window_id(Ref<RenderingNativeSurface> p_native_surface) const;
++	virtual void gl_window_make_current(DisplayServerEnums::WindowID p_window_id) override;
++
++	void set_host_interface(Ref<DisplayServerEmbeddedHostInterface> p_host_interface);
++	virtual DisplayServerEnums::CursorShape cursor_get_shape() const override;
++	virtual void cursor_set_shape(DisplayServerEnums::CursorShape p_shape) override;
++	void delete_host_interface();
++
++	virtual void pre_draw_viewport(RID p_render_target);
++	virtual void post_draw_viewport(RID p_render_target);
++	virtual void release_rendering_thread() override;
++};
++
++#endif // DISPLAY_SERVER_EMBEDDED_H
+diff --git a/servers/display_server_embedded_host_interface.cpp b/servers/display_server_embedded_host_interface.cpp
+new file mode 100644
+index 0000000..ac780d1
+--- /dev/null
++++ b/servers/display_server_embedded_host_interface.cpp
+@@ -0,0 +1,48 @@
++/**************************************************************************/
++/*  display_server_embedded_host_interface.cpp                            */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#include "servers/display_server_embedded_host_interface.h"
++
++#include "core/object/class_db.h"
++
++void DisplayServerEmbeddedHostInterface::_bind_methods() {
++	GDVIRTUAL_BIND(_cursor_get_shape);
++	GDVIRTUAL_BIND(_cursor_set_shape, "shape");
++}
++
++Input::CursorShape DisplayServerEmbeddedHostInterface::cursor_get_shape() const {
++	Input::CursorShape cursor_shape = InputClassEnums::CURSOR_ARROW;
++	GDVIRTUAL_CALL(_cursor_get_shape, cursor_shape);
++	return cursor_shape;
++}
++
++void DisplayServerEmbeddedHostInterface::cursor_set_shape(Input::CursorShape p_shape) {
++	GDVIRTUAL_CALL(_cursor_set_shape, p_shape);
++}
+diff --git a/servers/display_server_embedded_host_interface.h b/servers/display_server_embedded_host_interface.h
+new file mode 100644
+index 0000000..1c64f4e
+--- /dev/null
++++ b/servers/display_server_embedded_host_interface.h
+@@ -0,0 +1,51 @@
++/**************************************************************************/
++/*  display_server_embedded_host_interface.h                              */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#ifndef DISPLAY_SERVER_EMBEDDED_HOST_INTERFACE_H
++#define DISPLAY_SERVER_EMBEDDED_HOST_INTERFACE_H
++
++#include "core/input/input.h"
++#include "core/object/ref_counted.h"
++
++class DisplayServerEmbeddedHostInterface : public RefCounted {
++	GDCLASS(DisplayServerEmbeddedHostInterface, RefCounted);
++
++protected:
++	static void _bind_methods();
++
++public:
++	GDVIRTUAL0RC(Input::CursorShape, _cursor_get_shape);
++	GDVIRTUAL1(_cursor_set_shape, Input::CursorShape);
++
++	virtual Input::CursorShape cursor_get_shape() const;
++	virtual void cursor_set_shape(Input::CursorShape p_shape);
++};
++
++#endif // DISPLAY_SERVER_EMBEDDED_HOST_INTERFACE_H
+diff --git a/servers/rendering/gl_manager.h b/servers/rendering/gl_manager.h
+new file mode 100644
+index 0000000..eb21fa3
+--- /dev/null
++++ b/servers/rendering/gl_manager.h
+@@ -0,0 +1,67 @@
++/**************************************************************************/
++/*  gl_manager.h                                                          */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#ifndef GL_MANAGER_H
++#define GL_MANAGER_H
++
++#if defined(GLES3_ENABLED)
++// These must come first to avoid windows.h mess.
++#include "platform_gl.h"
++#endif
++
++#include "core/error/error_macros.h"
++#include "servers/display/display_server.h"
++#include "servers/rendering/rendering_native_surface.h"
++
++class GLManager {
++public:
++	virtual Error open_display(void *p_display) = 0;
++	virtual Error window_create(DisplayServerEnums::WindowID p_window_id, Ref<RenderingNativeSurface> p_native_surface, int p_width, int p_height) = 0;
++	virtual void window_resize(DisplayServerEnums::WindowID p_window_id, int p_width, int p_height) = 0;
++	virtual void window_destroy(DisplayServerEnums::WindowID p_window_id) = 0;
++	virtual Size2i window_get_size(DisplayServerEnums::WindowID p_window_id) const = 0;
++	virtual int window_get_render_target(DisplayServerEnums::WindowID p_window_id) const = 0;
++	virtual int window_get_color_texture(DisplayServerEnums::WindowID p_id) const = 0;
++	virtual void release_current() = 0;
++	virtual void swap_buffers() = 0;
++
++	virtual void window_make_current(DisplayServerEnums::WindowID p_window_id) = 0;
++
++	virtual void set_use_vsync(bool p_use) = 0;
++	virtual bool is_using_vsync() const = 0;
++	virtual bool validate_driver() const = 0;
++
++	virtual Error initialize(void *p_native_display = nullptr) = 0;
++
++	GLManager() {}
++	virtual ~GLManager() {}
++};
++
++#endif // GL_MANAGER_H
+diff --git a/servers/rendering/rendering_native_surface.cpp b/servers/rendering/rendering_native_surface.cpp
+new file mode 100644
+index 0000000..9600bea
+--- /dev/null
++++ b/servers/rendering/rendering_native_surface.cpp
+@@ -0,0 +1,45 @@
++/**************************************************************************/
++/*  rendering_native_surface.cpp                                          */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#include "rendering_native_surface.h"
++
++void RenderingNativeSurface::_bind_methods() {
++}
++
++RenderingNativeSurface::RenderingNativeSurface() {
++}
++
++RenderingNativeSurface::~RenderingNativeSurface() {
++}
++
++#ifdef EXTERNAL_TARGET_ENABLED
++void RenderingNativeSurface::setup_external_swapchain_callbacks() {
++}
++#endif
+diff --git a/servers/rendering/rendering_native_surface.h b/servers/rendering/rendering_native_surface.h
+new file mode 100644
+index 0000000..dda6cd9
+--- /dev/null
++++ b/servers/rendering/rendering_native_surface.h
+@@ -0,0 +1,61 @@
++/**************************************************************************/
++/*  rendering_native_surface.h                                            */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#ifndef RENDERING_NATIVE_SURFACE_H
++#define RENDERING_NATIVE_SURFACE_H
++
++#include "core/object/class_db.h"
++#include "core/object/ref_counted.h"
++
++class RenderingContextDriver;
++class GLManager;
++
++class RenderingNativeSurface : public RefCounted {
++	GDCLASS(RenderingNativeSurface, RefCounted);
++
++	static void _bind_methods();
++
++public:
++	RenderingNativeSurface();
++	~RenderingNativeSurface();
++
++#ifdef EXTERNAL_TARGET_ENABLED
++	virtual void setup_external_swapchain_callbacks();
++#endif
++
++	virtual RenderingContextDriver *create_rendering_context(const String &p_driver_name) = 0;
++
++	virtual GLManager *create_gl_manager(const String &p_driver_name) { return nullptr; }
++
++	virtual void *get_native_id() const = 0;
++	virtual const void *get_platform_data() const = 0;
++};
++
++#endif // RENDERING_NATIVE_SURFACE_H

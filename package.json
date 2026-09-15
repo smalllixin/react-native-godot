@@ -1,6 +1,6 @@
 {
   "name": "@borndotcom/react-native-godot",
-  "version": "1.0.2-smalllixin.6",
+  "version": "1.0.2-smalllixin.7",
   "summary": "React Native Godot",
   "description": "Embed Godot into React Native apps",
   "main": "lib/commonjs/index",

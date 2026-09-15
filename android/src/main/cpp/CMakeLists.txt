@@ -41,6 +41,10 @@ add_library(
 )
 set_target_properties(godot-cpp PROPERTIES IMPORTED_LOCATION ${LIBGODOT_CPP_DIR}/${ANDROID_ABI}/libgodot-cpp.a)
 target_include_directories(godot-cpp INTERFACE ${LIBGODOT_CPP_DIR}/include)
+# The Android bindings artifact targets API 24 and uses emulated TLS. Consumers
+# targeting API 29+ otherwise default to ELF TLS, splitting inline Wrapped
+# construction state from the archive's state and crashing on memnew(InputEvent).
+target_compile_options(godot-cpp INTERFACE -femulated-tls)
 
 file(GLOB rtngodot_SRC CONFIGURE_DEPENDS *.cpp)
 file(GLOB rtngodot_common_SRC CONFIGURE_DEPENDS ../../../../common/*.cpp)

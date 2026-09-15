@@ -57,3 +57,15 @@ fallback and requires a matching exported pack.
 
 Android qualification is recorded separately from iOS in House of G's Android
 integration report. Physical Android and production qualification remain pending.
+
+## C++ thread-local storage compatibility
+
+The bindings archive targets Android API 24 and uses emulated TLS. The bridge
+explicitly uses `-femulated-tls` too, including when its app targets API 29+.
+Mixing ELF TLS and emulated TLS creates two copies of Godot 4.7 construction
+state and aborts when allocating a touch event. Do not remove that consumer flag
+without rebuilding the bindings with the same TLS model.
+
+When checking the unstripped `librtngodot.so`, `llvm-nm -C` should show only
+`__emutls_v._ZZN5godot7Wrapped19_get_construct_infoEvE4info` storage, not a second
+`godot::Wrapped::_get_construct_info()::info` ELF TLS symbol.

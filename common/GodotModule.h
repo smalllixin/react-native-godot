@@ -29,6 +29,7 @@
 #include <godot_cpp/classes/rendering_native_surface.hpp>
 
 #include <future>
+#include <atomic>
 #include <mutex>
 
 struct PlatformData {};
@@ -38,6 +39,8 @@ class GodotModule {
 	PlatformData *_data = nullptr;
 
 	std::mutex _mutex;
+	std::atomic<uint64_t> _generation{0};
+	std::atomic<int> _sessionState{0}; // stopped, starting, running, paused, stopping, error
 
 	std::function<void(const char *, bool)> logFunction;
 
@@ -46,6 +49,8 @@ class GodotModule {
 
 public:
 	static GodotModule *get_singleton();
+	uint64_t generation() const { return _generation.load(); }
+	int session_state() const { return _sessionState.load(); }
 
 	godot::GodotInstance *get_or_create_instance(std::vector<std::string> args);
 

@@ -33,10 +33,14 @@ using namespace facebook;
 
 jsi::Value createNativeGodotModule(jsi::Runtime &rt, const std::shared_ptr<facebook::react::CallInvoker> &callInvoker);
 
+std::function<void()> currentGodotRuntimeInvalidator();
+
 namespace facebook::react {
 
 class NativeGodotModule : public NativeGodotModuleCxxSpec<NativeGodotModule> {
+std::function<void()> invalidateRuntime;
 public:
+	~NativeGodotModule() override { if (invalidateRuntime) invalidateRuntime(); }
 	NativeGodotModule(std::shared_ptr<CallInvoker> jsInvoker);
 
 	bool installTurboModule(jsi::Runtime &rt);

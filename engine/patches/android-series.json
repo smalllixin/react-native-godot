@@ -1,0 +1,22 @@
+{
+  "base": "ed1daf0bf001b61586d9930840f2f1394092c079",
+  "status": "in-progress",
+  "patches": [
+    {
+      "file": "0001-ios-embedding.patch",
+      "sha256": "57c8c8ecbb2b50d5a03e4781749d22faf0e2dacae29c9f2a5856f1ac61d1913b"
+    },
+    {
+      "file": "0003-android-embedding.patch",
+      "sha256": "ef0114840426f8a0ea0091fa1dc1524aeaab8cf1bbe6a318d6758701b15092b4"
+    }
+  ],
+  "bindingsBase": "6cceaf6a5f8b0d78ac5d71c139fd7fabba43b918",
+  "bindingsPatches": [
+    {
+      "file": "0002-bindings-restart.patch",
+      "sha256": "41d54c7b497aa5e91ceb40853bc74df2333ea6682c2485baa5358289e32ec656"
+    }
+  ],
+  "platform": "android"
+}

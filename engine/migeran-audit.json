@@ -1,0 +1,1534 @@
+{
+  "source": "07034974dae6bc225f29dcff5a8fd40470a0893d",
+  "base": "f62fdbde15035c5576dad93e586201f4d41ef0cb",
+  "files": [
+    {
+      "path": "SConstruct",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/config/project_settings.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/core_bind.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/core_bind.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/core_string_names.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/extension/extension_api_dump.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/extension/gdextension_function_loader.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/extension/gdextension_function_loader.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/extension/gdextension_interface.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/extension/gdextension_manager.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/extension/gdextension_manager.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/extension/godot_instance.cpp",
+      "classification": "upstream-core-api-retained; old executor extension omitted"
+    },
+    {
+      "path": "core/extension/godot_instance.h",
+      "classification": "upstream-core-api-retained; old executor extension omitted"
+    },
+    {
+      "path": "core/extension/libgodot.h",
+      "classification": "upstream-core-api-retained; old executor extension omitted"
+    },
+    {
+      "path": "core/io/file_access_zip.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/io/ip.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/io/libgodot_logger.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/io/libgodot_logger.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/io/resource_format_binary.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/io/resource_format_binary.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/io/resource_importer.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/io/resource_importer.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/io/resource_uid.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/object/class_db.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/object/class_db.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/object/object.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/object/object.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/object/script_language.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/os/midi_driver.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/os/midi_driver.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/os/os.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/os/os.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/profiling.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "core/profiling.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "core/register_core_types.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/string/string_name.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/string/string_name.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/string/translation_server.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/string/translation_server.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "core/variant/native_ptr.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "drivers/SCsub",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple/rendering_context_driver_vulkan_apple.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "drivers/apple/rendering_context_driver_vulkan_apple.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "drivers/apple/rendering_native_surface_apple.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple/rendering_native_surface_apple.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple_embedded/SCsub",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple_embedded/apple_embedded.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple_embedded/display_layer_apple_embedded.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple_embedded/display_server_apple_embedded.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple_embedded/display_server_apple_embedded.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple_embedded/main_utilities.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple_embedded/os_apple_embedded.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/apple_embedded/os_apple_embedded.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/coreaudio/audio_driver_coreaudio.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "drivers/d3d12/rendering_context_driver_d3d12.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/d3d12/rendering_context_driver_d3d12.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/egl/egl_manager.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/egl/egl_manager.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/egl/gl_manager_embedded_angle.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/egl/gl_manager_embedded_angle.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gl_context/SCsub",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "drivers/gles3/effects/copy_effects.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/effects/cubemap_filter.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/effects/glow.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/effects/post_effects.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/rasterizer_canvas_gles3.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/rasterizer_gles3.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/rasterizer_gles3.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/rasterizer_scene_gles3.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/shaders/skeleton.glsl",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/config.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/light_storage.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/light_storage.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/mesh_storage.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/particles_storage.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/render_scene_buffers_gles3.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/texture_storage.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/texture_storage.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/gles3/storage/utilities.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/metal/metal_device_properties.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/metal/metal_objects.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/metal/rendering_context_driver_metal.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/metal/rendering_context_driver_metal.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/register_driver_types.cpp",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "drivers/unix/os_unix.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "drivers/vulkan/rendering_context_driver_vulkan.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/vulkan/rendering_context_driver_vulkan.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/vulkan/rendering_device_driver_vulkan.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/vulkan/rendering_device_driver_vulkan.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/vulkan/rendering_native_surface_vulkan.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "drivers/vulkan/rendering_native_surface_vulkan.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "editor/animation/animation_blend_space_1d_editor.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_blend_space_1d_editor.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_blend_space_2d_editor.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_blend_space_2d_editor.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_blend_tree_editor_plugin.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_blend_tree_editor_plugin.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_player_editor_plugin.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_state_machine_editor.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_state_machine_editor.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_tree_editor_plugin.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/animation/animation_tree_editor_plugin.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/audio/audio_stream_preview.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/audio/audio_stream_preview.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/debugger/debug_adapter/debug_adapter_protocol.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/debugger/editor_debugger_node.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/debugger/editor_debugger_node.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/docks/editor_dock_manager.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/docks/editor_dock_manager.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/editor_interface.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/editor_undo_redo_manager.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/export/editor_export.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/export/editor_export.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/file_system/editor_file_system.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/gui/progress_dialog.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/gui/progress_dialog.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/import/3d/scene_import_settings.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/import/audio_stream_import_settings.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/import/audio_stream_import_settings.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/import/dynamic_font_import_settings.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/import/dynamic_font_import_settings.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/import/fbx_importer_manager.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/import/fbx_importer_manager.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/inspector/editor_resource_preview.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/run/editor_run_bar.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/run/editor_run_bar.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/run/run_instances_dialog.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/run/run_instances_dialog.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/2d/tiles/tile_set_editor.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/2d/tiles/tile_set_editor.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/3d/path_3d_editor_plugin.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/3d/path_3d_editor_plugin.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/canvas_item_editor_plugin.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/canvas_item_editor_plugin.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/editor_scene_tabs.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/editor_scene_tabs.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/gui/control_editor_plugin.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/scene/gui/control_editor_plugin.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/settings/editor_build_profile.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/settings/editor_build_profile.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/settings/editor_feature_profile.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/settings/editor_feature_profile.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/settings/project_settings_editor.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/settings/project_settings_editor.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/shader/shader_file_editor_plugin.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/shader/shader_file_editor_plugin.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "editor/version_control/version_control_editor_plugin.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "main/main.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "main/performance.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "main/performance.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/gdscript/language_server/gdscript_language_protocol.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/gdscript/language_server/gdscript_language_protocol.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/gdscript/register_types.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/gltf/editor/editor_import_blend_runner.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/gltf/editor/editor_import_blend_runner.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/godot_physics_2d/godot_physics_server_2d.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/godot_physics_2d/godot_physics_server_2d.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/godot_physics_3d/godot_physics_server_3d.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/godot_physics_3d/godot_physics_server_3d.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/navigation_2d/2d/nav_mesh_generator_2d.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/navigation_3d/3d/nav_mesh_generator_3d.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/navigation_3d/3d/navigation_mesh_generator.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/navigation_3d/editor/navigation_obstacle_3d_editor_plugin.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/openxr/extensions/openxr_fb_display_refresh_rate_extension.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/openxr/extensions/openxr_fb_update_swapchain_extension.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/openxr/openxr_platform_inc.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "modules/profiler/.gitignore",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "modules/profiler/SCsub",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "modules/profiler/config.py",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "modules/profiler/register_types.cpp",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "modules/profiler/register_types.h",
+      "classification": "outside-runtime-milestone; upstream editor retained"
+    },
+    {
+      "path": "modules/regex/SCsub",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/android/SCsub",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/api/api.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/api/api.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/api/java_class_wrapper.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/detect.py",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/display_server_android.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/app/config.gradle",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/editor/src/main/java/org/godotengine/editor/BaseGodotEditor.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/editor/src/main/java/org/godotengine/editor/BaseGodotGame.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/editor/src/main/java/org/godotengine/editor/GodotGame.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/editor/src/main/java/org/godotengine/editor/GodotXRGame.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/build.gradle",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/Godot.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/GodotFragment.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/GodotGLRenderView.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/GodotIO.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/GodotLib.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/GodotLibImpl.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/GodotVulkanRenderView.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/IGodotLib.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/editor/utils/GameMenuUtils.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/gl/GodotRenderer.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/input/GodotGestureHandler.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/input/GodotInputHandler.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/input/InputEventRunnable.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/io/FilePicker.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/io/StorageScope.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/tts/GodotTTS.java",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/vulkan/VkRenderer.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/lib/src/org/godotengine/godot/xr/HybridAppUtils.kt",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/scripts/publish-module.gradle",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java/scripts/publish-root.gradle",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java_class_wrapper.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java_godot_lib_jni.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java_godot_lib_jni.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/java_godot_wrapper.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/jni_utils.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/jni_utils.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/libgodot_android.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/libgodot_android.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/os_android.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/os_android.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/platform_gl.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/rendering_context_driver_vulkan_android.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/rendering_context_driver_vulkan_android.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/rendering_native_surface_android.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/android/rendering_native_surface_android.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/ios/SCsub",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/ios/api/api.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/ios/api/api.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/ios/detect.py",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/ios/display_layer_ios.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/ios/display_layer_ios.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/ios/display_server_ios.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/ios/libgodot_ios.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/ios/os_ios.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/ios/os_ios.mm",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/ios/platform_gl.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "platform/linuxbsd/SCsub",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/api/api.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/api/api.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/godot_linuxbsd.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/libgodot_linuxbsd.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/os_linuxbsd.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/wayland/SCsub",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/wayland/display_server_wayland.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/wayland/rendering_context_driver_vulkan_wayland.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/wayland/rendering_context_driver_vulkan_wayland.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/wayland/rendering_native_surface_wayland.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/wayland/rendering_native_surface_wayland.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/x11/SCsub",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/x11/display_server_x11.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/x11/rendering_context_driver_vulkan_x11.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/x11/rendering_context_driver_vulkan_x11.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/x11/rendering_native_surface_x11.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/linuxbsd/x11/rendering_native_surface_x11.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/macos/SCsub",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/api/api.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/api/api.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/detect.py",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/display_server_macos.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/display_server_macos.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/display_server_macos_embedded.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/display_server_macos_embedded.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/editor/embedded_process_macos.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/embedded_debugger.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/embedded_debugger.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/embedded_gl_manager.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/embedded_gl_manager.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/gl_manager_macos_angle.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/libgodot_macos.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/macos/os_macos.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/platform_builders.py",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/register_platform_apis.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "platform/visionos/api/api.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/visionos/api/api.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/web/api/api.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/web/api/api.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/web/audio_driver_web.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/web/os_web.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/web/web_main.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/SCsub",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/api/api.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/api/api.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/detect.py",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/display_server_windows.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/display_server_windows.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/godot_windows.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/libgodot_windows.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/os_windows.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/rendering_context_driver_vulkan_windows.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/rendering_context_driver_vulkan_windows.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/rendering_native_surface_windows.cpp",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform/windows/rendering_native_surface_windows.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "platform_methods.py",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/debugger/scene_debugger.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/debugger/scene_debugger.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/main/scene_tree.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/main/viewport.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/main/viewport.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/main/window.cpp",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "scene/main/window.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "scene/resources/3d/sky_material.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/resources/canvas_item_material.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/resources/material.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/resources/particle_process_material.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/resources/resource_format_text.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/resources/resource_format_text.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/resources/shader.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/resources/shader.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "scene/scene_string_names.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/SCsub",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/audio/audio_driver_dummy.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/audio/audio_driver_dummy.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/audio_server.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/audio_server.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/display_server.cpp",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/display_server.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/display_server_embedded.cpp",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/display_server_embedded.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/display_server_embedded_host_interface.cpp",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/display_server_embedded_host_interface.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/register_server_types.cpp",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/register_server_types.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/rendering/dummy/rasterizer_dummy.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/dummy/storage/texture_storage.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/gl_manager.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/rendering/renderer_compositor.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/effects/metal_fx.mm",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/framebuffer_cache_rd.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/renderer_compositor_rd.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/renderer_compositor_rd.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/renderer_scene_render_rd.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/renderer_scene_render_rd.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shader_rd.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/canvas.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/canvas_sdf.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/effects/copy.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/environment/sdfgi_integrate.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/environment/volumetric_fog_process.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/metal_simulator_inc.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/particles.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/particles_copy.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/scene_data_inc.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/scene_forward_lights_inc.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shaders/skeleton.glsl",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/texture_storage.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/texture_storage.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/uniform_set_cache_rd.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_scene_cull.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/renderer_viewport.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/rendering_context_driver.cpp",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/rendering/rendering_context_driver.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/rendering_device_driver.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/rendering_native_surface.cpp",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/rendering/rendering_native_surface.h",
+      "classification": "port-ios-embedding"
+    },
+    {
+      "path": "servers/rendering/rendering_native_surface_external_target.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/rendering_native_surface_external_target.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/rendering_server_default.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/rendering_server_default.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/shader_compiler.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/shader_compiler.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/shader_language.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/shader_types.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/shader_types.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering/storage/texture_storage.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering_server.cpp",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "servers/rendering_server.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "thirdparty/glad/egl.c",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "thirdparty/glad/gl.c",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "thirdparty/glad/glad/egl.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "thirdparty/glad/glad/gl.h",
+      "classification": "outside-metal-ios-milestone"
+    },
+    {
+      "path": "thirdparty/pcre2/src/pcre2_chkdint.c",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "thirdparty/pcre2/src/pcre2_compile.c",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    },
+    {
+      "path": "thirdparty/pcre2/src/pcre2_internal.h",
+      "classification": "requires-runtime-parity-review; not yet ported"
+    }
+  ]
+}

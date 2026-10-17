@@ -1,0 +1,617 @@
+diff --git a/drivers/register_driver_types.cpp b/drivers/register_driver_types.cpp
+index 8ff626d..b582852 100644
+--- a/drivers/register_driver_types.cpp
++++ b/drivers/register_driver_types.cpp
+@@ -33,6 +33,7 @@
+ #include "drivers/apple/rendering_native_surface_apple.h"
+ #endif
+ 
++#include "servers/rendering/rendering_native_surface_android.h"
+ #include "core/io/resource_saver.h"
+ #include "drivers/png/image_loader_png.h"
+ #include "drivers/png/resource_saver_png.h"
+@@ -45,6 +46,7 @@ static Ref<ImageLoaderPNG> image_loader_png;
+ static Ref<ResourceSaverPNG> resource_saver_png;
+ 
+ void register_core_driver_types() {
++	GDREGISTER_CLASS(RenderingNativeSurfaceAndroid);
+ #if defined(IOS_ENABLED) || defined(MACOS_ENABLED)
+ 	GDREGISTER_CLASS(RenderingNativeSurfaceApple);
+ #endif
+diff --git a/editor/doc/editor_help.cpp b/editor/doc/editor_help.cpp
+index a469a50..de03a63 100644
+--- a/editor/doc/editor_help.cpp
++++ b/editor/doc/editor_help.cpp
+@@ -3041,7 +3041,7 @@ void EditorHelp::_load_doc_thread(void *p_udata) {
+ 		callable_mp_static(&EditorHelp::_gen_extensions_docs).call_deferred();
+ 	} else {
+ 		// We have to go back to the main thread to start from scratch, bypassing any possibly existing cache.
+-		callable_mp_static(&EditorHelp::generate_doc).call_deferred(false, use_script_cache);
++		callable_mp_static(&EditorHelp::_generate_doc_if_active).call_deferred(false, use_script_cache);
+ 	}
+ 
+ 	OS::get_singleton()->benchmark_end_measure("EditorHelp", vformat("Generate Documentation (Run %d)", doc_generation_count));
+@@ -3081,6 +3081,9 @@ void EditorHelp::_gen_doc_thread(void *p_udata) {
+ }
+ 
+ void EditorHelp::_gen_extensions_docs() {
++	if (!doc) {
++		return;
++	}
+ 	doc->generate((DocTools::GENERATE_FLAG_SKIP_BASIC_TYPES | DocTools::GENERATE_FLAG_EXTENSION_CLASSES_ONLY));
+ 
+ 	// Append extra doc data, as it gets overridden by the generation step.
+@@ -3093,6 +3096,10 @@ static void _load_script_doc_cache(bool p_changes) {
+ }
+ 
+ void EditorHelp::load_script_doc_cache() {
++	// Static deferred callbacks can outlive editor teardown during --import.
++	if (!doc || !EditorNode::get_singleton()) {
++		return;
++	}
+ 	if (!ProjectSettings::get_singleton()->is_project_loaded()) {
+ 		print_verbose("Skipping loading script doc cache since no project is open.");
+ 		return;
+@@ -3251,6 +3258,12 @@ void EditorHelp::save_script_doc_cache() {
+ 	ERR_FAIL_COND_MSG(err != OK, vformat("Cannot save script documentation cache in %s.", get_script_doc_cache_full_path()));
+ }
+ 
++void EditorHelp::_generate_doc_if_active(bool p_use_cache, bool p_use_script_cache) {
++	if (doc) {
++		generate_doc(p_use_cache, p_use_script_cache);
++	}
++}
++
+ void EditorHelp::generate_doc(bool p_use_cache, bool p_use_script_cache) {
+ 	doc_generation_count++;
+ 	OS::get_singleton()->benchmark_begin_measure("EditorHelp", vformat("Generate Documentation (Run %d)", doc_generation_count));
+diff --git a/editor/doc/editor_help.h b/editor/doc/editor_help.h
+index 8b5786a..6d8e441 100644
+--- a/editor/doc/editor_help.h
++++ b/editor/doc/editor_help.h
+@@ -200,6 +200,7 @@ class EditorHelp : public VBoxContainer {
+ 	static void _load_doc_thread(void *p_udata);
+ 	static void _gen_doc_thread(void *p_udata);
+ 	static void _gen_extensions_docs();
++	static void _generate_doc_if_active(bool p_use_cache, bool p_use_script_cache);
+ 	static void _process_postponed_docs();
+ 	static void _load_script_doc_cache_thread(void *p_udata);
+ 	static void _regen_script_doc_thread(void *p_udata);
+diff --git a/modules/navigation_2d/2d/nav_mesh_generator_2d.cpp b/modules/navigation_2d/2d/nav_mesh_generator_2d.cpp
+index 8f1aebf..b7b34e2 100644
+--- a/modules/navigation_2d/2d/nav_mesh_generator_2d.cpp
++++ b/modules/navigation_2d/2d/nav_mesh_generator_2d.cpp
+@@ -71,6 +71,7 @@ NavMeshGenerator2D::NavMeshGenerator2D() {
+ 
+ NavMeshGenerator2D::~NavMeshGenerator2D() {
+ 	cleanup();
++	singleton = nullptr;
+ }
+ 
+ void NavMeshGenerator2D::sync() {
+diff --git a/modules/navigation_3d/3d/nav_mesh_generator_3d.cpp b/modules/navigation_3d/3d/nav_mesh_generator_3d.cpp
+index 200794d..bbe241f 100644
+--- a/modules/navigation_3d/3d/nav_mesh_generator_3d.cpp
++++ b/modules/navigation_3d/3d/nav_mesh_generator_3d.cpp
+@@ -84,6 +84,7 @@ NavMeshGenerator3D::NavMeshGenerator3D() {
+ 
+ NavMeshGenerator3D::~NavMeshGenerator3D() {
+ 	cleanup();
++	singleton = nullptr;
+ }
+ 
+ void NavMeshGenerator3D::sync() {
+diff --git a/platform/android/SCsub b/platform/android/SCsub
+index 68521fa..ddd08dc 100644
+--- a/platform/android/SCsub
++++ b/platform/android/SCsub
+@@ -36,6 +36,9 @@ android_files = [
+     "editor/editor_utils_jni.cpp",
+ ]
+ 
++if env["library_type"] != "executable":
++    android_files += ["libgodot_android.cpp"]
++
+ env_android = env.Clone()
+ 
+ android_objects = []
+diff --git a/platform/android/detect.py b/platform/android/detect.py
+index fff6944..a21f8b4 100644
+--- a/platform/android/detect.py
++++ b/platform/android/detect.py
+@@ -80,7 +80,7 @@ def get_flags():
+     return {
+         "arch": "arm64",
+         "target": "template_debug",
+-        "supported": ["mono"],
++        "supported": ["mono", "library"],
+     }
+ 
+ 
+diff --git a/platform/android/java/lib/src/main/java/org/godotengine/godot/Godot.kt b/platform/android/java/lib/src/main/java/org/godotengine/godot/Godot.kt
+index 8155e2d..4e94e9c 100644
+--- a/platform/android/java/lib/src/main/java/org/godotengine/godot/Godot.kt
++++ b/platform/android/java/lib/src/main/java/org/godotengine/godot/Godot.kt
+@@ -219,7 +219,13 @@ class Godot private constructor(val context: Context) {
+ 	/**
+ 	 * Returns true if the engine has been initialized, false otherwise.
+ 	 */
+-	fun isInitialized() = primaryHost != null && isNativeInitialized() && renderViewInitialized
++	fun prepareEmbeddedHost(host: GodotHost): Any {
++        primaryHost = host
++        GodotPluginRegistry.initializePluginRegistry(this, emptySet())
++        return godotNativeBridge
++    }
++
++    fun isInitialized() = primaryHost != null && isNativeInitialized() && renderViewInitialized
+ 
+ 	/**
+ 	 * Provides access to the primary host [Activity].
+diff --git a/platform/android/jni_utils.cpp b/platform/android/jni_utils.cpp
+index c0e48d6..9dde217 100644
+--- a/platform/android/jni_utils.cpp
++++ b/platform/android/jni_utils.cpp
+@@ -564,6 +564,15 @@ void setup_android_class_loader() {
+ 	env->DeleteLocalRef(known_class);
+ }
+ 
++void setup_android_class_loader(jobject p_loader) {
++    cleanup_android_class_loader();
++    JNIEnv *env = get_jni_env();
++    android_class_loader = env->NewGlobalRef(p_loader);
++    jclass cls = env->FindClass("java/lang/ClassLoader");
++    load_class_method = env->GetMethodID(cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
++    env->DeleteLocalRef(cls);
++}
++
+ void cleanup_android_class_loader() {
+ 	if (android_class_loader != nullptr) {
+ 		JNIEnv *env = get_jni_env();
+diff --git a/platform/android/jni_utils.h b/platform/android/jni_utils.h
+index bd15ce7..2477ea4 100644
+--- a/platform/android/jni_utils.h
++++ b/platform/android/jni_utils.h
+@@ -94,6 +94,7 @@ static inline String jstring_to_string(jstring source, JNIEnv *env = nullptr) {
+  * Set up thread-safe Android ClassLoader (used by jni_find_class() below).
+  */
+ void setup_android_class_loader();
++void setup_android_class_loader(jobject p_loader);
+ void cleanup_android_class_loader();
+ 
+ /**
+diff --git a/platform/android/libgodot_android.cpp b/platform/android/libgodot_android.cpp
+new file mode 100644
+index 0000000..7123e82
+--- /dev/null
++++ b/platform/android/libgodot_android.cpp
+@@ -0,0 +1,54 @@
++// Android host initialization adapted from Migeran's embedding extension.
++#include "libgodot_android.h"
++#include "core/extension/godot_instance.h"
++#include "main/main.h"
++#include "dir_access_jandroid.h"
++#include "file_access_android.h"
++#include "file_access_filesystem_jandroid.h"
++#include "java_godot_io_wrapper.h"
++#include "java_godot_wrapper.h"
++#include "api/java_class_wrapper.h"
++#include "net_socket_android.h"
++#include "os_android.h"
++#include "thread_jandroid.h"
++#include "jni_utils.h"
++#include "servers/audio/audio_server.h"
++static GodotInstance *instance = nullptr;
++static OS_Android *embedded_os = nullptr;
++static GodotIOJavaWrapper *io = nullptr;
++static GodotJavaWrapper *wrapper = nullptr;
++static JavaClassWrapper *classes = nullptr;
++static void release_host() {
++    delete embedded_os; embedded_os = nullptr;
++    delete io; io = nullptr;
++    delete wrapper; wrapper = nullptr;
++    FileAccessAndroid::terminate(); DirAccessJAndroid::terminate();
++    FileAccessFilesystemJAndroid::terminate(); NetSocketAndroid::terminate();
++    cleanup_android_class_loader(); AudioDriverManager::reset();
++}
++extern "C" LIBGODOT_API GDExtensionObjectPtr libgodot_create_godot_instance_android(int argc, char *argv[], GDExtensionInitializationFunction init, JNIEnv *env, jobject assets, jobject net, jobject dirs, jobject files, jobject godot_io, jobject godot_bridge, jobject loader) {
++    ERR_FAIL_COND_V(instance || argc < 1, nullptr);
++    JavaVM *vm = nullptr; env->GetJavaVM(&vm);
++    init_thread_jandroid(vm, env); setup_android_class_loader(loader);
++    AudioDriverManager::reset();
++    FileAccessAndroid::setup(assets); DirAccessJAndroid::setup(dirs);
++    FileAccessFilesystemJAndroid::setup(files); NetSocketAndroid::setup(net);
++    io = new GodotIOJavaWrapper(env, godot_io);
++    wrapper = new GodotJavaWrapper(env, godot_bridge);
++    embedded_os = new OS_Android(wrapper, io, false);
++    if (Main::setup(argv[0], argc - 1, &argv[1], false) != OK) { release_host(); return nullptr; }
++    classes = memnew(JavaClassWrapper);
++    instance = memnew(GodotInstance);
++    if (!instance->initialize(init)) {
++        memdelete(instance); instance = nullptr;
++        memdelete(classes); classes = nullptr;
++        Main::cleanup(); release_host(); return nullptr;
++    }
++    return (GDExtensionObjectPtr)instance;
++}
++extern "C" LIBGODOT_API void libgodot_destroy_godot_instance(GDExtensionObjectPtr ptr) {
++    if (!instance || ptr != instance) return;
++    instance->stop(); memdelete(instance); instance = nullptr;
++    memdelete(classes); classes = nullptr;
++    Main::cleanup(); release_host();
++}
+diff --git a/platform/android/libgodot_android.h b/platform/android/libgodot_android.h
+new file mode 100644
+index 0000000..1dd41aa
+--- /dev/null
++++ b/platform/android/libgodot_android.h
+@@ -0,0 +1,84 @@
++/**************************************************************************/
++/*  libgodot_android.h                                                    */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#ifndef LIBGODOT_ANDROID_H
++#define LIBGODOT_ANDROID_H
++
++
++// Export macros for DLL visibility
++#if defined(_MSC_VER) || defined(__MINGW32__)
++#define LIBGODOT_API __declspec(dllexport)
++#elif defined(__GNUC__) || defined(__clang__)
++#define LIBGODOT_API __attribute__((visibility("default")))
++#endif // if defined(_MSC_VER)
++
++#if __has_include("core/extension/gdextension_interface.gen.h")
++#include "core/extension/gdextension_interface.gen.h"
++#elif __has_include("gdextension_interface.h")
++#include "gdextension_interface.h"
++#else
++#error gdextension_interface.h is required
++#endif
++
++#include <jni.h>
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @name libgodot_create_godot_instance_android
++ * @since 4.4
++ *
++ * Creates a new Godot instance.
++ *
++ * @param p_argc The number of command line arguments.
++ * @param p_argv The C-style array of command line arguments.
++ * @param p_init_func GDExtension initialization function of the host application.
++ *
++ * @return A pointer to created \ref GodotInstance GDExtension object or nullptr if there was an error.
++ */
++LIBGODOT_API GDExtensionObjectPtr libgodot_create_godot_instance_android(int p_argc, char *p_argv[], GDExtensionInitializationFunction p_init_func, JNIEnv* env, jobject p_asset_manager, jobject p_net_utils, jobject p_directory_access_handler, jobject p_file_access_handler, jobject p_godot_io_wrapper, jobject p_godot_wrapper, jobject p_class_loader);
++
++/**
++ * @name libgodot_destroy_godot_instance
++ * @since 4.4
++ *
++ * Destroys an existing Godot instance.
++ *
++ * @param p_godot_instance The reference to the GodotInstance object to destroy.
++ *
++ */
++LIBGODOT_API void libgodot_destroy_godot_instance(GDExtensionObjectPtr p_godot_instance);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif // LIBGODOT_ANDROID_H
+diff --git a/platform/android/os_android.cpp b/platform/android/os_android.cpp
+index a6aaad6..6364f56 100644
+--- a/platform/android/os_android.cpp
++++ b/platform/android/os_android.cpp
+@@ -32,6 +32,7 @@
+ 
+ #include "dir_access_jandroid.h"
+ #include "display_server_android.h"
++#include "servers/display_server_embedded.h"
+ #include "file_access_filesystem_jandroid.h"
+ #include "java_godot_io_wrapper.h"
+ #include "java_godot_wrapper.h"
+@@ -947,6 +948,9 @@ OS_Android::OS_Android(GodotJavaWrapper *p_godot_java, GodotIOJavaWrapper *p_god
+ 	AudioDriverManager::add_driver(&audio_driver_android);
+ 
+ 	DisplayServerAndroid::register_android_driver();
++#ifdef LIBGODOT_ENABLED
++	DisplayServerEmbedded::register_embedded_driver();
++#endif
+ }
+ 
+ Error OS_Android::execute(const String &p_path, const List<String> &p_arguments, String *r_pipe, int *r_exitcode, bool read_stderr, Mutex *p_pipe_mutex, bool p_open_console) {
+diff --git a/platform/web/api/api.cpp b/platform/web/api/api.cpp
+index deb7847..c392a04 100644
+--- a/platform/web/api/api.cpp
++++ b/platform/web/api/api.cpp
+@@ -59,7 +59,7 @@ JavaScriptBridge::JavaScriptBridge() {
+ 	singleton = this;
+ }
+ 
+-JavaScriptBridge::~JavaScriptBridge() {}
++JavaScriptBridge::~JavaScriptBridge() { singleton = nullptr; }
+ 
+ void JavaScriptBridge::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("eval", "code", "use_global_execution_context"), &JavaScriptBridge::eval, DEFVAL(false));
+diff --git a/servers/display_server_embedded.cpp b/servers/display_server_embedded.cpp
+index c46ba53..e017a83 100644
+--- a/servers/display_server_embedded.cpp
++++ b/servers/display_server_embedded.cpp
+@@ -1,3 +1,4 @@
++#include "core/os/os.h"
+ /**************************************************************************/
+ /*  display_server_embedded.cpp                                           */
+ /**************************************************************************/
+@@ -170,7 +171,7 @@ DisplayServerEmbedded::DisplayServerEmbedded(const String &p_rendering_driver, W
+ 			if (gldriver_novalidate || validation_result) {
+                 print_verbose(vformat("GL driver accepted: %s", driver_candidate));
+ 				rendering_driver = driver_candidate;
+-				OS::get_singleton()->set_current_rendering_driver_name(rendering_driver);
++				OS::get_singleton()->set_current_rendering_driver_name(rendering_driver, OS::RENDERING_SOURCE_COMMANDLINE);
+                 break;
+ 			}
+ 
+@@ -576,12 +577,6 @@ void DisplayServerEmbedded::delete_native_window(DisplayServerEnums::WindowID p_
+ int64_t DisplayServerEmbedded::window_get_native_handle(HandleType p_handle_type, WindowID p_window) const {
+ 	switch (p_handle_type) {
+ #if defined(GLES3_ENABLED)
+-		case OPENGL_FBO: {
+-			if (gl_manager) {
+-				return gl_manager->window_get_render_target(p_window);
+-			}
+-			return 0;
+-		}
+ 		case WINDOW_HANDLE: {
+ 			if (gl_manager) {
+ 				return (int64_t)gl_manager->window_get_color_texture(p_window);
+diff --git a/servers/movie_writer/movie_writer.cpp b/servers/movie_writer/movie_writer.cpp
+index ba5e101..8e30600 100644
+--- a/servers/movie_writer/movie_writer.cpp
++++ b/servers/movie_writer/movie_writer.cpp
+@@ -44,6 +44,11 @@
+ MovieWriter *MovieWriter::writers[MovieWriter::MAX_WRITERS];
+ uint32_t MovieWriter::writer_count = 0;
+ 
++void MovieWriter::clear_writers() {
++	for (uint32_t i = 0; i < writer_count; ++i) writers[i] = nullptr;
++	writer_count = 0;
++}
++
+ void MovieWriter::add_writer(MovieWriter *p_writer) {
+ 	ERR_FAIL_COND(writer_count == MAX_WRITERS);
+ 	writers[writer_count++] = p_writer;
+diff --git a/servers/movie_writer/movie_writer.h b/servers/movie_writer/movie_writer.h
+index 870fc6c..2e96575 100644
+--- a/servers/movie_writer/movie_writer.h
++++ b/servers/movie_writer/movie_writer.h
+@@ -83,6 +83,7 @@ public:
+ 	virtual bool handles_file(const String &p_path) const;
+ 	virtual void get_supported_extensions(List<String> *r_extensions) const;
+ 
++	static void clear_writers();
+ 	static void add_writer(MovieWriter *p_writer);
+ 	static MovieWriter *find_writer_for_file(const String &p_file);
+ 
+diff --git a/servers/register_server_types.cpp b/servers/register_server_types.cpp
+index 4a1d14c..de70a05 100644
+--- a/servers/register_server_types.cpp
++++ b/servers/register_server_types.cpp
+@@ -391,6 +391,7 @@ void register_server_types() {
+ }
+ 
+ void unregister_server_types() {
++	MovieWriter::clear_writers();
+ 	OS::get_singleton()->benchmark_begin_measure("Servers", "Unregister Extensions");
+ 
+ 	ServersDebugger::deinitialize();
+diff --git a/servers/rendering/rendering_native_surface_android.cpp b/servers/rendering/rendering_native_surface_android.cpp
+new file mode 100644
+index 0000000..336a8dd
+--- /dev/null
++++ b/servers/rendering/rendering_native_surface_android.cpp
+@@ -0,0 +1,89 @@
++// Android surfaces preserve the Migeran bridge interface with upstream 4.7 rendering.
++#include "rendering_native_surface_android.h"
++#include "gl_manager.h"
++#if defined(ANDROID_ENABLED)
++#include <android/native_window.h>
++#if defined(VULKAN_ENABLED)
++#include "platform/android/rendering_context_driver_vulkan_android.h"
++#endif
++#if defined(GLES3_ENABLED)
++#include <EGL/egl.h>
++class EmbeddedGLAndroid : public GLManager {
++    EGLDisplay display = EGL_NO_DISPLAY;
++    EGLContext context = EGL_NO_CONTEXT;
++    EGLConfig config = nullptr;
++    struct Window { EGLSurface surface = EGL_NO_SURFACE; Size2i size; Ref<RenderingNativeSurface> native; };
++    HashMap<int, Window> windows;
++    int current = -1;
++    bool vsync = true;
++public:
++    Error initialize(void * = nullptr) override {
++        display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
++        if (display == EGL_NO_DISPLAY || !eglInitialize(display, nullptr, nullptr)) return ERR_CANT_CREATE;
++        eglBindAPI(EGL_OPENGL_ES_API);
++        EGLint attrs[] = {EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_RED_SIZE,8,EGL_GREEN_SIZE,8,EGL_BLUE_SIZE,8,EGL_ALPHA_SIZE,8,EGL_DEPTH_SIZE,24,EGL_NONE};
++        EGLint count = 0;
++        if (!eglChooseConfig(display, attrs, &config, 1, &count) || count == 0) return ERR_CANT_CREATE;
++        EGLint ctx[] = {EGL_CONTEXT_CLIENT_VERSION,3,EGL_NONE};
++        context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx);
++        return context == EGL_NO_CONTEXT ? ERR_CANT_CREATE : OK;
++    }
++    Error open_display(void *) override { return OK; }
++    Error window_create(int id, Ref<RenderingNativeSurface> native, int, int) override {
++        auto *android = Object::cast_to<RenderingNativeSurfaceAndroid>(native.ptr());
++        ERR_FAIL_NULL_V(android, ERR_INVALID_PARAMETER);
++        Window w; w.native = native; w.size = Size2i(android->get_width(), android->get_height());
++        EGLint format; eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &format);
++        ANativeWindow_setBuffersGeometry(android->get_window(), w.size.x, w.size.y, format);
++        w.surface = eglCreateWindowSurface(display, config, android->get_window(), nullptr);
++        if (w.surface == EGL_NO_SURFACE) return ERR_CANT_CREATE;
++        windows[id] = w; window_make_current(id); return OK;
++    }
++    void window_resize(int id, int w, int h) override { if (windows.has(id)) windows[id].size = Size2i(w,h); }
++    void window_destroy(int id) override { if (!windows.has(id)) return; if(current==id) release_current(); eglDestroySurface(display,windows[id].surface); windows.erase(id); }
++    Size2i window_get_size(int id) const override { return windows.has(id) ? windows[id].size : Size2i(); }
++    int window_get_render_target(int) const override { return 0; }
++    int window_get_color_texture(int) const override { return 0; }
++    void release_current() override { eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT); current=-1; }
++    void swap_buffers() override { if(windows.has(current)) eglSwapBuffers(display,windows[current].surface); }
++    void window_make_current(int id) override { if(!windows.has(id)) return; current=id; eglMakeCurrent(display,windows[id].surface,windows[id].surface,context); eglSwapInterval(display,vsync?1:0); }
++    void set_use_vsync(bool use) override { vsync=use; if(current>=0) eglSwapInterval(display,use?1:0); }
++    bool is_using_vsync() const override { return vsync; }
++    bool validate_driver() const override { return true; }
++    ~EmbeddedGLAndroid() override { release_current(); for (auto &entry : windows) eglDestroySurface(display,entry.value.surface); windows.clear(); if(context!=EGL_NO_CONTEXT) eglDestroyContext(display,context); if(display!=EGL_NO_DISPLAY) eglTerminate(display); }
++};
++#endif
++#endif
++void RenderingNativeSurfaceAndroid::_bind_methods() {
++    ClassDB::bind_static_method("RenderingNativeSurfaceAndroid",D_METHOD("create","window","width","height"),&RenderingNativeSurfaceAndroid::create_api);
++    ClassDB::bind_method(D_METHOD("get_window"),&RenderingNativeSurfaceAndroid::get_window_api);
++    ClassDB::bind_method(D_METHOD("get_width"),&RenderingNativeSurfaceAndroid::get_width);
++    ClassDB::bind_method(D_METHOD("get_height"),&RenderingNativeSurfaceAndroid::get_height);
++}
++Ref<RenderingNativeSurfaceAndroid> RenderingNativeSurfaceAndroid::create_api(uint64_t w,uint32_t width,uint32_t height) { return create((ANativeWindow *)w,width,height); }
++Ref<RenderingNativeSurfaceAndroid> RenderingNativeSurfaceAndroid::create(ANativeWindow *w,uint32_t width,uint32_t height) {
++    Ref<RenderingNativeSurfaceAndroid> result; result.instantiate(); result->window=w;result->width=width;result->height=height;
++#ifdef ANDROID_ENABLED
++    if(w) ANativeWindow_acquire(w);
++#endif
++    return result;
++}
++RenderingContextDriver *RenderingNativeSurfaceAndroid::create_rendering_context(const String &driver) {
++#if defined(ANDROID_ENABLED) && defined(VULKAN_ENABLED)
++    if(driver=="vulkan") return memnew(RenderingContextDriverVulkanAndroid);
++#endif
++    return nullptr;
++}
++GLManager *RenderingNativeSurfaceAndroid::create_gl_manager(const String &driver) {
++#if defined(ANDROID_ENABLED) && defined(GLES3_ENABLED)
++    if(driver=="opengl3") return memnew(EmbeddedGLAndroid);
++#endif
++    return nullptr;
++}
++void *RenderingNativeSurfaceAndroid::get_native_id() const {return window;}
++RenderingNativeSurfaceAndroid::RenderingNativeSurfaceAndroid() {}
++RenderingNativeSurfaceAndroid::~RenderingNativeSurfaceAndroid() {
++#ifdef ANDROID_ENABLED
++    if(window) ANativeWindow_release(window);
++#endif
++}
+diff --git a/servers/rendering/rendering_native_surface_android.h b/servers/rendering/rendering_native_surface_android.h
+new file mode 100644
+index 0000000..baacc66
+--- /dev/null
++++ b/servers/rendering/rendering_native_surface_android.h
+@@ -0,0 +1,79 @@
++/**************************************************************************/
++/*  rendering_native_surface_android.h                                    */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#ifndef RENDERING_NATIVE_SURFACE_ANDROID_H
++#define RENDERING_NATIVE_SURFACE_ANDROID_H
++
++#include "core/variant/native_ptr.h"
++#include "servers/rendering/rendering_native_surface.h"
++
++struct ANativeWindow;
++
++class RenderingNativeSurfaceAndroid : public RenderingNativeSurface {
++	GDCLASS(RenderingNativeSurfaceAndroid, RenderingNativeSurface);
++
++	static void _bind_methods();
++
++	ANativeWindow *window = nullptr;
++	uint32_t width = 0;
++	uint32_t height = 0;
++
++public:
++	static Ref<RenderingNativeSurfaceAndroid> create_api(uint64_t p_window, uint32_t p_width, uint32_t p_height);
++
++	static Ref<RenderingNativeSurfaceAndroid> create(ANativeWindow *p_window, uint32_t p_width, uint32_t p_height);
++
++	ANativeWindow *get_window() const {
++		return window;
++	}
++
++	uint64_t get_window_api() const {
++		return (uint64_t)window;
++	}
++
++	uint32_t get_width() const {
++		return width;
++	}
++
++	uint32_t get_height() const {
++		return height;
++	}
++
++	RenderingContextDriver *create_rendering_context(const String &p_driver_name) override;
++	GLManager *create_gl_manager(const String &p_driver_name) override;
++
++	void *get_native_id() const override;
++	const void *get_platform_data() const override { return &window; }
++
++	RenderingNativeSurfaceAndroid();
++	~RenderingNativeSurfaceAndroid();
++};
++
++#endif // RENDERING_NATIVE_SURFACE_ANDROID_H

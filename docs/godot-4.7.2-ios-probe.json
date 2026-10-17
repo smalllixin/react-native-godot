@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/godotengine/godot",
+  "revision": "ed1daf0bf001b61586d9930840f2f1394092c079",
+  "target": "ios arm64 simulator static_library",
+  "exitCode": 255,
+  "output": "scons: Reading SConscript files ...\nERROR: Library builds unsupported for ios\n"
+}

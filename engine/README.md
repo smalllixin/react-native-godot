@@ -33,6 +33,39 @@ Xcode, available slices, and archive SHA-256 values. They are not promotion evid
 The manually dispatched workflow builds artifacts; it never publishes a package
 or changes the application's engine selection.
 
+### Release symbols
+
+Release packaging runs `strip -S -x` on each built dynamic framework before it
+enters the XCFramework. Static `libgodot-cpp` archives and Debug outputs retain
+their symbols. The packaging check requires unchanged executable/data sections,
+UUID, imported/exported symbols and linked libraries; a failed check leaves the
+framework untouched. App embedding signs the resulting framework normally.
+
+`libgodot.symbols.zip` is a separate diagnostic artifact, never a runtime
+dependency. It retains the original unstripped binaries, available dSYMs and
+per-slice verification reports. Keep it with the corresponding native artifact
+hashes. Symbol stripping does not change the engine ABI, bridge or PCK format.
+
+If the original build cache is gone, installed artifacts can be recovered only
+after their complete file inventory and original archive identity match the
+consumer profile:
+
+```sh
+python3 engine/repack_ios_release.py \
+  --installed-libs /path/to/app/node_modules/@borndotcom/react-native-godot/ios/libs \
+  --profile /path/to/app/config/godot/candidate.json \
+  --output /new/path/to/artifacts/Release
+python3 -m unittest discover -s engine -p test_strip_release.py -v
+```
+
+The new directory contains both archives, a proposed `profile.json`, a provenance
+record and the symbol archive. It is labelled as recovery from verified installed
+files, not a fresh source build. It cannot recreate missing dSYMs; retained
+unstripped binaries preserve the symbol information actually available. Repacking
+the static bindings changes ZIP identity only, not their file contents. Update
+the consumer's artifact hashes and bundle toolchain together, reinstall Pods,
+and validate a new signed Release app before promotion.
+
 ## Native contract
 
 The bridge detects `libgodot_embedding_api_version` and calls upstream

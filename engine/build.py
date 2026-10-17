@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from strip_release import strip_framework
 
 ROOT = Path(__file__).resolve().parent
 
@@ -107,7 +108,7 @@ def main():
         for sdk in sdks:
             run([scons, 'platform=ios', f'target={target}', 'arch=arm64', f'ios_simulator={"yes" if sdk == "simulator" else "no"}', f'custom_api_file={api/"extension_api.json"}', 'api_version=4.7', f'-j{args.jobs}'], cpp)
     if args.stage in ('package','all'):
-        frameworks = []; bindings = []
+        frameworks = []; bindings = []; symbol_reports = {}
         headers = cache/'headers'; headers.mkdir(exist_ok=True)
         shutil.copytree(cpp/'include', headers, dirs_exist_ok=True)
         shutil.copytree(cpp/'gen/include', headers, dirs_exist_ok=True)
@@ -129,6 +130,8 @@ def main():
                  '-destination', 'generic/platform=iOS Simulator' if sdk == 'simulator' else 'generic/platform=iOS',
                  'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=NO', 'ENABLE_MODULE_VERIFIER=NO',
                  f'CONFIGURATION_BUILD_DIR={build}', 'build'])
+            if args.configuration == 'Release':
+                symbol_reports[sdk] = strip_framework(build/'libgodot.framework', output/'symbols'/sdk)
             frameworks += ['-framework', build/'libgodot.framework']
             library = cpp/f'bin/libgodot-cpp.ios.{target}.arm64{suffix}.a'
             # CocoaPods needs the same library basename in every SDK slice.
@@ -141,6 +144,8 @@ def main():
             run(['xcodebuild', '-create-xcframework', *inputs, '-output', target_path])
             archive = output/f'{name}.xcframework.zip'
             run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', target_path, archive])
+        if symbol_reports:
+            run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', output/'symbols', output/'libgodot.symbols.zip'])
         provenance = {'qualification':'unqualified', 'engineRevision':engine_ref, 'bindingsRevision':cpp_ref, 'patches':series,
                       'apiSha256':hashlib.sha256((api/'extension_api.json').read_bytes()).hexdigest(),
                       'sourceDiffSha256': source_diff_sha256(source),
@@ -148,7 +153,9 @@ def main():
                       'bridgeDirty':bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT)),
                       'configuration':args.configuration, 'sdks':sdks, 'sourceMode':'development-checkout' if args.source else 'pinned-source-and-patches', 'sourceDirty':bool(subprocess.check_output(['git','status','--porcelain'],cwd=source)),
                       'xcode':subprocess.check_output(['xcodebuild','-version'],text=True).strip(),
-                      'artifacts':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in output.glob('*.zip')}}
+                      'symbolStripping':symbol_reports,
+                      'symbolArchiveSha256':hashlib.sha256((output/'libgodot.symbols.zip').read_bytes()).hexdigest() if symbol_reports else None,
+                      'artifacts':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in output.glob('*.xcframework.zip')}}
         (output/'provenance.json').write_text(json.dumps(provenance, indent=2)+'\n')
 
 if __name__ == '__main__': main()

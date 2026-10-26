@@ -28,6 +28,8 @@ package com.rtngodot;
 import android.app.Activity;
 import android.content.res.AssetManager;
 import android.graphics.PixelFormat;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -73,6 +75,7 @@ public class RTNLibGodot implements GodotHost {
 	}
 
 	private static final Map<String, WindowSurfaceData> windowData = new HashMap<>();
+	private static final Handler main = new Handler(Looper.getMainLooper());
 
 	private static void createWindowSurface(String name, int width, int height) {
 		SurfaceControl.Builder b = new SurfaceControl.Builder();
@@ -104,6 +107,7 @@ public class RTNLibGodot implements GodotHost {
 		}
 
 		WindowSurfaceData wsData = getOrCreateWindowSurface(name, width, height);
+		boolean resized = wsData.width != width || wsData.height != height;
 
 		if (wsData.attachedControl == null || wsData.attachedSurface == null || !wsData.attachedControl.equals(control) || !wsData.attachedSurface.equals(holder.getSurface())) {
 			if (wsData.attachedControl != null) {
@@ -137,6 +141,15 @@ public class RTNLibGodot implements GodotHost {
 		}
 
 		updateWindowNative(name, wsData.surface, width, height);
+		// Vulkan sizes the swapchain from the surface's default size, which the surface only reports
+		// after its next connect or frame. Resize once more after that, or the engine keeps rendering
+		// at the old size and the compositor stretches it (unfolding a foldable).
+		if (resized) {
+			main.postDelayed(() -> {
+				if (windowData.get(name) == wsData && wsData.attachedControl != null && wsData.width == width && wsData.height == height)
+					updateWindowNative(name, wsData.surface, width, height);
+			}, 250);
+		}
 	}
 
 	public void removeWindow(String name, SurfaceControl owner) {
